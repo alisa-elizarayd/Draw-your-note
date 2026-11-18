@@ -107,7 +107,20 @@ let selectedId=null,tool='pen',ink='#2d414a',brushSize=4,gesture=null;
 let db=null,storageType='none',savingTimer=null,toastTimer=null,renderPending=false;
 let undo=[],redo=[],started=false,viewport={w:1,h:1,dpr:1},pointerTouches=new Map(),pinch=null,spaceHeld=false;
 const clone = a => JSON.parse(JSON.stringify(a));
-const snap=()=>clone({notes:model.notes,strokes:model.strokes,nextId:model.nextId});
+// Copy-on-write undo snapshots: previous strokes and their points are immutable
+// once a gesture ends. Cloning 1000s of points at EVERY Pencil contact caused a
+// noticeable pause between letters on iPad, even before the first ink sample.
+const snap=()=>({notes:model.notes.map(n=>({...n,strokes:n.strokes.slice()})),strokes:model.strokes.slice(),nextId:model.nextId});
+function unchanged(before){
+  if(before.nextId!==model.nextId||before.notes.length!==model.notes.length||before.strokes.length!==model.strokes.length)return false;
+  for(let i=0;i<model.strokes.length;i++)if(before.strokes[i]!==model.strokes[i])return false;
+  for(let i=0;i<model.notes.length;i++){
+    const a=before.notes[i],b=model.notes[i];
+    if(a.id!==b.id||a.x!==b.x||a.y!==b.y||a.w!==b.w||a.h!==b.h||a.title!==b.title||a.text!==b.text||a.color!==b.color||a.strokes.length!==b.strokes.length)return false;
+    for(let j=0;j<b.strokes.length;j++)if(a.strokes[j]!==b.strokes[j])return false;
+  }
+  return true;
+}
 const max=(v,a,b)=>Math.min(b,Math.max(a,v));
 const getNote=id=>model.notes.find(n=>n.id===id);
 function id(){return model.nextId++}
@@ -116,7 +129,7 @@ function setStatus(s,good=true){$('saveWord').textContent=s;$('saveDot').classLi
 function updateButtons(){$('undo').disabled=!undo.length;$('redo').disabled=!redo.length;$('hint').hidden=!!(model.notes.length||model.strokes.length)}
 function commit(before){
   if(!before)return;
-  if(JSON.stringify(before)===JSON.stringify(snap()))return;
+  if(unchanged(before))return;
   undo.push(before);if(undo.length>32)undo.shift();redo=[];updateButtons();scheduleSave();requestDraw();
 }
 function doUndo(){if(!undo.length)return;redo.push(snap());Object.assign(model,undo.pop());selectedId=null;syncNotePanel();updateButtons();scheduleSave();requestDraw()}
@@ -139,7 +152,11 @@ function writeDB(data){return new Promise(resolve=>{
 })}
 function writeLocal(data){try{localStorage.setItem(DB_NAME,JSON.stringify(data));return true}catch(e){return false}}
 function scheduleSave(){if(!started)return;setStatus('Сохранение…');clearTimeout(savingTimer);savingTimer=setTimeout(saveNow,650)}
-async function saveNow(){clearTimeout(savingTimer);if(!started)return;const data=clone(model);let okay=false;
+async function saveNow(){clearTimeout(savingTimer);if(!started)return;
+ // Never deep-clone the board during a live Pencil stroke. A pending autosave
+ // on a slower iPad used to stall the renderer in the middle of handwriting.
+ if(gesture?.type==='draw'||gesture?.type==='erase'){scheduleSave();return}
+ const data=clone(model);let okay=false;
  if(db){okay=await writeDB(data);if(okay)storageType='indexedDB'}
  if(!okay){okay=writeLocal(data);if(okay)storageType='localStorage'}
  setStatus(okay?'Сохранено на устройстве':'Не удалось сохранить · сделай копию',okay);
@@ -172,34 +189,49 @@ function drawGrid(c,w,h,v){const z=v.zoom;let step=32;while(step*z<18)step*=2;wh
   for(let x=a;x<=right;x+=step)for(let y=b;y<=bottom;y+=step){c.beginPath();c.arc(x,y,.9/z,0,Math.PI*2);c.fill()}
  }c.globalAlpha=1;
 }
-// Draw each complete highlighter mark in ONE translucent pass. Painting segments
-// individually made their overlaps look almost opaque at every turn.
-// Quadratic curves + a light positional filter soften sharp Pencil corners.
+// Cache completed Path2D strokes: redrawing the entire board for each Pencil
+// sample must not rebuild every old stroke's smoothed geometry over and over.
+const strokePathCache=typeof Path2D==='function'?new WeakMap():null;
 function drawStroke(c,s){
  const src=s.points;if(!src?.length)return;
- const isMarker=s.tool==='marker';
- const alpha=isMarker?max(Number(s.opacity)||.22,.08,.55):1;
- const pressure=src.reduce((sum,p)=>sum+(Number(p[2])||.5),0)/src.length;
- const width=s.width*(isMarker?3.0:(.82+.34*pressure));
- c.save();c.globalAlpha=alpha;c.lineWidth=width;c.lineCap='round';c.lineJoin='round';c.strokeStyle=s.color;c.fillStyle=s.color;
- if(src.length===1){c.beginPath();c.arc(src[0][0],src[0][1],width/2,0,Math.PI*2);c.fill();c.restore();return}
- // Keep first/last points exact; subtly smooth jitter between samples.
- const pts=src.map((p,i)=>{
-  if(i===0||i===src.length-1)return p;
-  const a=src[i-1],b=src[i+1];
-  return [p[0]*.72+(a[0]+b[0])*.14,p[1]*.72+(a[1]+b[1])*.14,p[2]];
- });
- c.beginPath();c.moveTo(pts[0][0],pts[0][1]);
- if(pts.length===2){c.lineTo(pts[1][0],pts[1][1])}
- else{
-  for(let i=1;i<pts.length-1;i++){
-   const midX=(pts[i][0]+pts[i+1][0])/2;
-   const midY=(pts[i][1]+pts[i+1][1])/2;
-   c.quadraticCurveTo(pts[i][0],pts[i][1],midX,midY);
+ const active=gesture?.type==='draw'&&gesture.stroke===s;
+ let shape=!active&&strokePathCache?strokePathCache.get(s):null;
+ if(!shape){
+  const isMarker=s.tool==='marker';
+  const pressure=src.reduce((sum,p)=>sum+(Number(p[2])||.5),0)/src.length;
+  const width=s.width*(isMarker?3.0:(.82+.34*pressure));
+  const alpha=isMarker?max(Number(s.opacity)||.22,.08,.55):1;
+  const path=typeof Path2D==='function'?new Path2D():null;
+  const target=path||c;
+  if(src.length===1){target.arc(src[0][0],src[0][1],width/2,0,Math.PI*2)}
+  else{
+   const pts=src.map((p,i)=>{
+    if(i===0||i===src.length-1)return p;
+    const a=src[i-1],b=src[i+1];
+    return [p[0]*.72+(a[0]+b[0])*.14,p[1]*.72+(a[1]+b[1])*.14,p[2]];
+   });
+   target.moveTo(pts[0][0],pts[0][1]);
+   if(pts.length===2)target.lineTo(pts[1][0],pts[1][1]);
+   else{
+    for(let i=1;i<pts.length-1;i++)target.quadraticCurveTo(pts[i][0],pts[i][1],(pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2);
+    const last=pts[pts.length-1];target.quadraticCurveTo(last[0],last[1],last[0],last[1]);
+   }
   }
-  const last=pts[pts.length-1];c.quadraticCurveTo(last[0],last[1],last[0],last[1]);
+  shape={path,width,alpha,point:src.length===1};
+  if(!active&&strokePathCache)strokePathCache.set(s,shape);
  }
- c.stroke();c.restore();
+ c.save();c.globalAlpha=shape.alpha;c.lineWidth=shape.width;c.lineCap='round';c.lineJoin='round';c.strokeStyle=s.color;c.fillStyle=s.color;
+ if(!shape.path){
+  // Fallback for older browsers without Path2D (still preserves pen support).
+  c.beginPath();
+  if(shape.point)c.arc(src[0][0],src[0][1],shape.width/2,0,Math.PI*2);
+  else{
+   c.moveTo(src[0][0],src[0][1]);
+   for(let i=1;i<src.length;i++)c.lineTo(src[i][0],src[i][1]);
+  }
+  if(shape.point)c.fill();else c.stroke();
+ }else if(shape.point)c.fill(shape.path);else c.stroke(shape.path);
+ c.restore();
 }
 function linesForText(c,text,maxWidth){const lines=[];String(text).split('\n').forEach(par=>{if(par===''){lines.push('');return}let line='';for(const word of par.split(/\s+/)){const maybe=line?line+' '+word:word;if(c.measureText(maybe).width<=maxWidth||!line){line=maybe}else{lines.push(line);line=word}if(c.measureText(line).width>maxWidth){let part='';for(const ch of line){if(c.measureText(part+ch).width>maxWidth&&part){lines.push(part);part=ch}else part+=ch}line=part}}lines.push(line)});return lines}
 function drawNote(c,n,selected){const p=PALETTE[n.color]||PALETTE.lemon;c.save();
@@ -242,9 +274,10 @@ function pointFor(e,target){
 }
 function startInk(evt,pid,t){const w=W(evt.clientX,evt.clientY),hitNote=hit(w);const note=hitNote?.note||null;
  if(note)selectNote(note);
- if(tool==='eraser'){const before=snap();gesture={type:'erase',id:pid,noteId:note?.id||null,before,changed:false};eraseAt(evt);return}
+ if(t==='pen'){pointerTouches.clear();pinch=null}
+ if(tool==='eraser'){const before=snap();gesture={type:'erase',pointerType:t,id:pid,noteId:note?.id||null,before,changed:false};eraseAt(evt);return}
  const target=note?note.strokes:model.strokes;
- const s={id:id(),tool:tool==='marker'?'marker':'pen',color:ink,width:brushSize,opacity:tool==='marker'?.22:1,points:[]};const before=snap();target.push(s);gesture={type:'draw',id:pid,noteId:note?.id||null,stroke:s,before,
+ const before=snap();const s={id:id(),tool:tool==='marker'?'marker':'pen',color:ink,width:brushSize,opacity:tool==='marker'?.22:1,points:[]};target.push(s);gesture={type:'draw',pointerType:t,id:pid,noteId:note?.id||null,stroke:s,before,
   transform:{left:canvas.getBoundingClientRect().left,top:canvas.getBoundingClientRect().top,
    viewX:model.view.x,viewY:model.view.y,zoom:model.view.zoom,noteX:note?.x||0,noteY:note?.y||0}};addInkPoints(evt);requestDraw();
 }
@@ -297,8 +330,12 @@ function eraseAt(e){
  if(changed){g.changed=true;requestDraw()}
 }
 function pointerDown(e){if(!started||e.button!==undefined&&e.button!==0)return; // Для iPad: только pointerType=pen рисует, touch лишь перемещает.
- if(e.cancelable)e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(_e){}
  const pt=e.pointerType||'mouse';const isTouch=pt==='touch';
+ // A resting palm must not interrupt the current Pencil stroke or start a pinch.
+ if(isTouch&&gesture?.pointerType==='pen')return;
+ if(e.cancelable)e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(_e){}
+ // WebKit can reuse the same stylus pointer ID immediately after lift-off.
+ if(!isTouch&&gesture?.id===e.pointerId&&(gesture.type==='draw'||gesture.type==='erase'))finishGesture();
  if(isTouch){pointerTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointerTouches.size>=2){beginPinch();return}}
  const w=W(e.clientX,e.clientY),h=hit(w);
  if(isTouch){if(h?.part==='header')startMoveNote(h.note,e,e.pointerId);else{if(h?.note)selectNote(h.note);startPan(e,e.pointerId)}return}
@@ -307,6 +344,7 @@ function pointerDown(e){if(!started||e.button!==undefined&&e.button!==0)return; 
  if(tool==='pen'||tool==='marker'||tool==='eraser'){startInk(e,e.pointerId,pt);$('inputHint').textContent=pt==='pen'?' · Pencil распознан ✎':pt==='mouse'?' · Мышь рисует':' · Рисование'}
 }
 function beginPinch(){if(pointerTouches.size<2)return;const p=[...pointerTouches.values()].slice(0,2);const midX=(p[0].x+p[1].x)/2,midY=(p[0].y+p[1].y)/2;
+ if(gesture?.pointerType==='pen')return;
  if(gesture?.type==='draw'||gesture?.type==='erase')finishGesture();else if(gesture?.type==='move'||gesture?.type==='resize')finishGesture();else gesture=null;
  const world=W(midX,midY);pinch={dist:Math.max(4,Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y)),zoom:model.view.zoom,world};
 }
@@ -320,13 +358,21 @@ function pointerMove(e){if(!started)return;const pt=e.pointerType||'mouse';if(pt
  else if(g.type==='resize'){const n=getNote(g.noteId);if(!n)return;const w=W(e.clientX,e.clientY);n.w=max(g.w+w.x-g.start.x,190,900);n.h=max(g.h+w.y-g.start.y,170,900);g.changed=true;requestDraw()}
 }
 function finishGesture(){if(!gesture)return;const g=gesture;gesture=null;
- if(g.type==='draw'||g.type==='erase'||g.type==='move'||g.type==='resize')commit(g.before);
+ if(g.type==='draw'||g.type==='move'||g.type==='resize'||(g.type==='erase'&&g.changed))commit(g.before);
  else if(g.type==='pan')scheduleSave();requestDraw();
 }
 function pointerUp(e){if(e.pointerType==='touch'){pointerTouches.delete(e.pointerId);if(pinch){if(pointerTouches.size<2){pinch=null;gesture=null;scheduleSave()}return}}
- if(gesture?.id===e.pointerId)finishGesture();try{if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId)}catch(_e){}
+ if(gesture?.id===e.pointerId){
+  if(e.type!=='pointercancel'&&gesture.type==='draw')addInkPoints(e); // precise final tip
+  if(e.type!=='pointercancel'&&gesture.type==='erase')eraseAt(e);
+  finishGesture();
+ }
+ try{if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId)}catch(_e){}
 }
-canvas.addEventListener('pointerdown',pointerDown,{passive:false});canvas.addEventListener('pointermove',pointerMove,{passive:false});canvas.addEventListener('pointerup',pointerUp,{passive:false});canvas.addEventListener('pointercancel',pointerUp,{passive:false});canvas.addEventListener('lostpointercapture',e=>{if(gesture?.id===e.pointerId)finishGesture()});
+canvas.addEventListener('pointerdown',pointerDown,{passive:false});canvas.addEventListener('pointermove',pointerMove,{passive:false});canvas.addEventListener('pointerup',pointerUp,{passive:false});canvas.addEventListener('pointercancel',pointerUp,{passive:false});
+// Do not finalize gestures on lostpointercapture: Safari may emit it AFTER the
+// next pointerdown with the same reused Apple Pencil ID, killing the new stroke.
+window.addEventListener('blur',()=>{if(gesture)finishGesture()});
 // Старый Safari: если PointerEvent отсутствует, определяем именно touchType="stylus".
 if(!window.PointerEvent){
  const ev=(t,kind)=>({pointerId:t.identifier+100000,pointerType:t.touchType==='stylus'?'pen':'touch',clientX:t.clientX,clientY:t.clientY,pressure:t.force||.5,button:0,cancelable:true,preventDefault(){}});
@@ -392,6 +438,7 @@ setTool('pen');boot();
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .then(reg => reg.update())
       .catch(error => console.warn('Offline installation unavailable:', error));
   });
 }
