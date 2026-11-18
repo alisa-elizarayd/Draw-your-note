@@ -30,6 +30,14 @@ The app is fully client-side: no login, tracking, or cloud sync. Your drawings s
 
 Hardware note: Apple Pencil requires testing on a real iPad; desktop simulations do not prove iPadOS stylus compatibility.
 
+### v5 — HSB palettes, advanced zoom and Pencil lasso
+- Custom HSB palette (H 0–359°, S 0–100%, B 0–100%) for canvas background, Pencil/marker colors and sticky notes.
+- Custom background and note colors are included in autosave, JSON export/import and PNG export; existing v3/v4 backups remain compatible.
+- Zoom now ranges from **0.5% to 500%** (true zero would collapse the entire canvas); **Show all** fits widely separated notes.
+- New **Lasso** tool: use Apple Pencil to draw a loop around handwritten strokes or sticker centers; tap **Copy**, **Paste**, **Delete**, or **Clear selection**. For keyboard users, Cmd/Ctrl+C, V, Backspace also work.
+- Copies preserve notes, typed text, attached ink and pressure metadata. Selected handwriting within a sticker can be copied independently and pasted onto the board. Undo/redo applies to paste/delete.
+- The PWA still needs no server, external fonts or JavaScript dependencies.
+
 ## Live site
 
 https://alisa-elizarayd.github.io/Draw-your-note/
