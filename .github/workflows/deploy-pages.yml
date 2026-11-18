@@ -1,73 +1,41 @@
-name: Build Draw your notes for branch-based GitHub Pages
-
+name: Validate Draw your notes PWA (GitHub Pages from main root)
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: draw-notes-root-build
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out public repository
+      - name: Check out source
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-
-      - name: Restore offline PWA files
-        run: python3 build_site.py
-
-      - name: Validate PWA assets
-        shell: bash
+      - name: Check deployable HTML, service worker, manifest and icons
         run: |
           python3 - <<'PY'
-          import json
-          import struct
-          import zlib
+          import json, re, subprocess, tempfile, struct
           from pathlib import Path
-          root = Path('_site')
-          html = (root / 'index.html').read_text()
+          r = Path('.')
+          html = (r / 'index.html').read_text(encoding='utf-8')
+          assert html.lstrip().lower().startswith('<!doctype html>')
           assert 'serviceWorker.register' in html
-          assert '<html' in html.lower()
-          assert 'manifest.webmanifest' in html
-          manifest = json.loads((root / 'manifest.webmanifest').read_text())
+          manifest = json.loads((r / 'manifest.webmanifest').read_text())
           assert manifest['display'] == 'standalone'
           assert manifest['start_url'] == './'
-          for name in ('icon-192.png','icon-512.png','icon-512-maskable.png','apple-touch-icon.png'):
-              data = (root / name).read_bytes()
-              assert data[:8] == b'\x89PNG\r\n\x1a\n', name
-              offset = 8
-              while offset < len(data):
-                  n = struct.unpack('>I', data[offset:offset+4])[0]
-                  typ = data[offset+4:offset+8]
-                  chunk = data[offset+8:offset+8+n]
-                  got = struct.unpack('>I', data[offset+8+n:offset+12+n])[0]
-                  assert zlib.crc32(typ+chunk) & 0xffffffff == got, (name, typ)
-                  offset += 12+n
-                  if typ == b'IEND': break
-              assert offset == len(data), name
-          print('HTML, manifest and PNG icon checks passed')
+          for icon in ('icon-192.png','icon-512.png','icon-512-maskable.png','apple-touch-icon.png'):
+              data = (r / icon).read_bytes()
+              assert data[:8] == bytes.fromhex('89504e470d0a1a0a'), icon
+              width, height = struct.unpack('>II', data[16:24])
+              if icon == 'icon-192.png': assert (width,height)==(192,192)
+              elif icon == 'apple-touch-icon.png': assert (width,height)==(180,180)
+              else: assert (width,height)==(512,512)
+          for n, script in enumerate(re.findall(r'<script[^>]*>(.*?)</script>',html,re.S)):
+              with tempfile.NamedTemporaryFile(mode='w',suffix='.js') as temp:
+                  temp.write(script);temp.flush()
+                  subprocess.run(['node','--check',temp.name], check=True)
+          subprocess.run(['node','--check','sw.js'],check=True)
+          print('PWA source checks passed; main/ root is the deploy source.')
           PY
-
-      - name: Publish actual PWA files to main branch root
-        shell: bash
-        run: |
-          cp _site/index.html ./index.html
-          cp _site/icon-192.png _site/icon-512.png _site/icon-512-maskable.png _site/apple-touch-icon.png ./
-          touch .nojekyll
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html icon-192.png icon-512.png icon-512-maskable.png apple-touch-icon.png .nojekyll
-          if ! git diff --cached --quiet; then
-            git commit -m "Build website files for GitHub Pages (branch root)"
-            git push origin HEAD:main
-          else
-            echo "Website files already up to date"
-          fi
