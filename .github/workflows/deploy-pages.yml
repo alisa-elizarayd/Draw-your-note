@@ -1,37 +1,73 @@
-name: Deploy Draw your notes to GitHub Pages
+name: Build Draw your notes for branch-based GitHub Pages
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: github-pages
-  cancel-in-progress: true
+  group: draw-notes-root-build
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Check out public repository
         uses: actions/checkout@v4
-      - name: Build offline PWA
+        with:
+          persist-credentials: true
+
+      - name: Restore offline PWA files
         run: python3 build_site.py
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - name: Upload static website
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./_site
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+
+      - name: Validate PWA assets
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import struct
+          import zlib
+          from pathlib import Path
+          root = Path('_site')
+          html = (root / 'index.html').read_text()
+          assert 'serviceWorker.register' in html
+          assert '<html' in html.lower()
+          assert 'manifest.webmanifest' in html
+          manifest = json.loads((root / 'manifest.webmanifest').read_text())
+          assert manifest['display'] == 'standalone'
+          assert manifest['start_url'] == './'
+          for name in ('icon-192.png','icon-512.png','icon-512-maskable.png','apple-touch-icon.png'):
+              data = (root / name).read_bytes()
+              assert data[:8] == b'\x89PNG\r\n\x1a\n', name
+              offset = 8
+              while offset < len(data):
+                  n = struct.unpack('>I', data[offset:offset+4])[0]
+                  typ = data[offset+4:offset+8]
+                  chunk = data[offset+8:offset+8+n]
+                  got = struct.unpack('>I', data[offset+8+n:offset+12+n])[0]
+                  assert zlib.crc32(typ+chunk) & 0xffffffff == got, (name, typ)
+                  offset += 12+n
+                  if typ == b'IEND': break
+              assert offset == len(data), name
+          print('HTML, manifest and PNG icon checks passed')
+          PY
+
+      - name: Publish actual PWA files to main branch root
+        shell: bash
+        run: |
+          cp _site/index.html ./index.html
+          cp _site/icon-192.png _site/icon-512.png _site/icon-512-maskable.png _site/apple-touch-icon.png ./
+          touch .nojekyll
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html icon-192.png icon-512.png icon-512-maskable.png apple-touch-icon.png .nojekyll
+          if ! git diff --cached --quiet; then
+            git commit -m "Build website files for GitHub Pages (branch root)"
+            git push origin HEAD:main
+          else
+            echo "Website files already up to date"
+          fi
