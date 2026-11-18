@@ -101,8 +101,8 @@ const PALETTE={
   lilac:{fill:'#f0e5ff',top:'#e9dafa',edge:'#dfd0ef'},
   rose:{fill:'#ffe6e8',top:'#ffdce0',edge:'#f3d0d6'}
 };
-const HEAD=43, MIN_ZOOM=.32, MAX_ZOOM=3.2, DB_NAME='sticky-space-offline-v2', DB_KEY='main';
-let model={version:3,notes:[],strokes:[],nextId:1,view:{x:0,y:0,zoom:1}};
+const HEAD=43, MIN_ZOOM=.005, MAX_ZOOM=5, DB_NAME='sticky-space-offline-v2', DB_KEY='main';
+let model={version:5,notes:[],strokes:[],nextId:1,background:'#f8fafb',view:{x:0,y:0,zoom:1}};
 let selectedId=null,tool='pen',ink='#2d414a',brushSize=4,gesture=null;
 let db=null,storageType='none',savingTimer=null,toastTimer=null,renderPending=false;
 let undo=[],redo=[],started=false,viewport={w:1,h:1,dpr:1},pointerTouches=new Map(),pinch=null,spaceHeld=false;
@@ -110,9 +110,9 @@ const clone = a => JSON.parse(JSON.stringify(a));
 // Copy-on-write undo snapshots: previous strokes and their points are immutable
 // once a gesture ends. Cloning 1000s of points at EVERY Pencil contact caused a
 // noticeable pause between letters on iPad, even before the first ink sample.
-const snap=()=>({notes:model.notes.map(n=>({...n,strokes:n.strokes.slice()})),strokes:model.strokes.slice(),nextId:model.nextId});
+const snap=()=>({notes:model.notes.map(n=>({...n,strokes:n.strokes.slice()})),strokes:model.strokes.slice(),nextId:model.nextId,background:model.background});
 function unchanged(before){
-  if(before.nextId!==model.nextId||before.notes.length!==model.notes.length||before.strokes.length!==model.strokes.length)return false;
+  if(before.background!==model.background||before.nextId!==model.nextId||before.notes.length!==model.notes.length||before.strokes.length!==model.strokes.length)return false;
   for(let i=0;i<model.strokes.length;i++)if(before.strokes[i]!==model.strokes[i])return false;
   for(let i=0;i<model.notes.length;i++){
     const a=before.notes[i],b=model.notes[i];
@@ -164,9 +164,9 @@ async function saveNow(){clearTimeout(savingTimer);if(!started)return;
 function saneDoc(raw){
  if(!raw||typeof raw!=='object'||!Array.isArray(raw.notes)||!Array.isArray(raw.strokes))return null;
  const safeStroke=s=>({opacity:s.tool==='marker'?max(Number(s.opacity)||.22,.08,.55):1,id:Number.isFinite(s.id)?s.id:0,tool:s.tool==='marker'?'marker':'pen',color:typeof s.color==='string'?s.color:'#2d414a',width:max(Number(s.width)||4,1,40),points:(Array.isArray(s.points)?s.points:[]).filter(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1])).slice(0,35000).map(p=>[p[0],p[1],max(Number(p[2])||.5,.05,1)])});
- const notes=raw.notes.slice(0,1200).filter(n=>Number.isFinite(n.x)&&Number.isFinite(n.y)).map(n=>({id:Number(n.id)||0,x:n.x,y:n.y,w:max(Number(n.w)||320,190,900),h:max(Number(n.h)||280,170,900),color:PALETTE[n.color]?n.color:'lemon',title:String(n.title||'Новая заметка').slice(0,64),text:String(n.text||'').slice(0,20000),strokes:(Array.isArray(n.strokes)?n.strokes:[]).slice(0,12000).map(safeStroke)}));
+ const notes=raw.notes.slice(0,1200).filter(n=>Number.isFinite(n.x)&&Number.isFinite(n.y)).map(n=>({id:Number(n.id)||0,x:n.x,y:n.y,w:max(Number(n.w)||320,190,900),h:max(Number(n.h)||280,170,900),color:PALETTE[n.color]?n.color:(/^#[0-9a-f]{6}$/i.test(n.color)?n.color:'lemon'),title:String(n.title||'Новая заметка').slice(0,64),text:String(n.text||'').slice(0,20000),strokes:(Array.isArray(n.strokes)?n.strokes:[]).slice(0,12000).map(safeStroke)}));
  const strokes=raw.strokes.slice(0,25000).map(safeStroke);let nextId=Math.max(1,Number(raw.nextId)||1);for(const n of notes){nextId=Math.max(nextId,n.id+1);for(const st of n.strokes)nextId=Math.max(nextId,st.id+1)}for(const st of strokes)nextId=Math.max(nextId,st.id+1);
- const v=raw.view||{};return{version:3,notes,strokes,nextId,view:{x:Number.isFinite(v.x)?v.x:0,y:Number.isFinite(v.y)?v.y:0,zoom:max(Number(v.zoom)||1,MIN_ZOOM,MAX_ZOOM)}};
+ const v=raw.view||{};return{version:5,notes,strokes,nextId,background:/^#[0-9a-f]{6}$/i.test(raw.background)?raw.background:'#f8fafb',view:{x:Number.isFinite(v.x)?v.x:0,y:Number.isFinite(v.y)?v.y:0,zoom:max(Number(v.zoom)||1,MIN_ZOOM,MAX_ZOOM)}};
 }
 async function boot(){
   resizeCanvas();db=await openDB();const stored=await readDB()||readLocal();const clean=saneDoc(stored);
@@ -184,11 +184,13 @@ function S(x,y){return{x:x*model.view.zoom+model.view.x,y:y*model.view.zoom+mode
 function drawGrid(c,w,h,v){const z=v.zoom;let step=32;while(step*z<18)step*=2;while(step*z>100)step/=2;
  const left=-v.x/z,right=(w-v.x)/z,top=-v.y/z,bottom=(h-v.y)/z;
  const a=Math.floor(left/step)*step,b=Math.floor(top/step)*step;
- c.fillStyle='#dce6e8';c.globalAlpha=.75;
+ c.fillStyle=darkBackground(model.background)?'#e7f2f4':'#9db7b9';c.globalAlpha=.62;
  const count=((right-left)/step+2)*((bottom-top)/step+2);if(count<15000){
   for(let x=a;x<=right;x+=step)for(let y=b;y<=bottom;y+=step){c.beginPath();c.arc(x,y,.9/z,0,Math.PI*2);c.fill()}
  }c.globalAlpha=1;
 }
+function darkBackground(col){const a=[1,3,5].map(i=>parseInt((col||'#f8fafb').slice(i,i+2),16)||0);return(a[0]*.2126+a[1]*.7152+a[2]*.0722)<135}
+function notePaletteFor(color){if(PALETTE[color])return PALETTE[color];if(!/^#[0-9a-f]{6}$/i.test(color))return PALETTE.lemon;const r=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));const mix=(t,f)=>'#'+r.map((n,i)=>Math.round(n*(1-f)+t[i]*f).toString(16).padStart(2,'0')).join('');return{fill:color,top:mix([255,255,255],.13),edge:mix([49,64,68],.24)}}
 // Cache completed Path2D strokes: redrawing the entire board for each Pencil
 // sample must not rebuild every old stroke's smoothed geometry over and over.
 const strokePathCache=typeof Path2D==='function'?new WeakMap():null;
@@ -234,16 +236,16 @@ function drawStroke(c,s){
  c.restore();
 }
 function linesForText(c,text,maxWidth){const lines=[];String(text).split('\n').forEach(par=>{if(par===''){lines.push('');return}let line='';for(const word of par.split(/\s+/)){const maybe=line?line+' '+word:word;if(c.measureText(maybe).width<=maxWidth||!line){line=maybe}else{lines.push(line);line=word}if(c.measureText(line).width>maxWidth){let part='';for(const ch of line){if(c.measureText(part+ch).width>maxWidth&&part){lines.push(part);part=ch}else part+=ch}line=part}}lines.push(line)});return lines}
-function drawNote(c,n,selected){const p=PALETTE[n.color]||PALETTE.lemon;c.save();
+function drawNote(c,n,selected){const p=notePaletteFor(n.color),dark=darkBackground(p.fill);c.save();
  c.shadowColor='rgba(62,76,90,.13)';c.shadowBlur=22;c.shadowOffsetY=7;roundPath(c,n.x,n.y,n.w,n.h,14);c.fillStyle=p.fill;c.fill();c.shadowColor='transparent';c.shadowBlur=0;c.shadowOffsetY=0;
  roundPath(c,n.x,n.y,n.w,n.h,14);c.lineWidth=1;c.strokeStyle=p.edge;c.stroke();
  c.save();roundPath(c,n.x,n.y,n.w,n.h,14);c.clip();c.fillStyle=p.top;c.fillRect(n.x,n.y,n.w,HEAD);c.restore();
  c.beginPath();c.moveTo(n.x+15,n.y+HEAD+.5);c.lineTo(n.x+n.w-15,n.y+HEAD+.5);c.lineWidth=.8;c.strokeStyle='rgba(96,113,116,.13)';c.stroke();
  c.fillStyle='#64747b';c.beginPath();c.arc(n.x+17,n.y+HEAD/2,4,0,Math.PI*2);c.fill();
- c.fillStyle='#435960';c.textBaseline='middle';c.font='650 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+ c.fillStyle=dark?'#ffffff':'#435960';c.textBaseline='middle';c.font='650 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
  let title=n.title||'Новая заметка';while(c.measureText(title).width>n.w-66&&title.length>2)title=title.slice(0,-2)+'…';c.fillText(title,n.x+31,n.y+HEAD/2+1);
  c.save();c.beginPath();c.rect(n.x+8,n.y+HEAD+3,n.w-16,n.h-HEAD-10);c.clip();
- if(n.text){c.fillStyle='#526268';c.font='15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';c.textBaseline='top';const lineH=23;let y=n.y+HEAD+17;for(const line of linesForText(c,n.text,n.w-34)){c.fillText(line,n.x+17,y);y+=lineH;if(y>n.y+n.h+lineH)break}}
+ if(n.text){c.fillStyle=dark?'#fafcfd':'#526268';c.font='15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';c.textBaseline='top';const lineH=23;let y=n.y+HEAD+17;for(const line of linesForText(c,n.text,n.w-34)){c.fillText(line,n.x+17,y);y+=lineH;if(y>n.y+n.h+lineH)break}}
  // Note ink is foreground content, clipped only to the whole sticker (not
  // to its text/body box), so handwriting may even annotate its heading.
  c.restore();
@@ -253,12 +255,12 @@ function drawNote(c,n,selected){const p=PALETTE[n.color]||PALETTE.lemon;c.save()
   c.fillStyle='#fff';c.strokeStyle='#47978a';c.lineWidth=1.7/model.view.zoom;const r=9/model.view.zoom;c.beginPath();c.arc(n.x+n.w,n.y+n.h,r,0,Math.PI*2);c.fill();c.stroke();c.strokeStyle='#589c93';c.beginPath();c.moveTo(n.x+n.w-r*.3,n.y+n.h+r*.3);c.lineTo(n.x+n.w+r*.3,n.y+n.h-r*.3);c.stroke()
  }
  c.restore()}
-function paint(c,w,h,v,withGrid=true,includeSelection=true,density=1){c.setTransform(density,0,0,density,0,0);c.fillStyle='#f8fafb';c.fillRect(0,0,w,h);c.save();c.translate(v.x,v.y);c.scale(v.zoom,v.zoom);if(withGrid)drawGrid(c,w,h,v);for(const n of model.notes)drawNote(c,n,includeSelection&&selectedId===n.id);for(const s of model.strokes)drawStroke(c,s);c.restore()}
-function draw(){if(!ctx)return;paint(ctx,viewport.w,viewport.h,model.view,true,true,viewport.dpr);$('zoomValue').textContent=Math.round(model.view.zoom*100)+'%';canvas.style.cursor=tool==='hand'||spaceHeld?'grab':tool==='select'?'default':tool==='eraser'?'cell':'crosshair'}
+function paint(c,w,h,v,withGrid=true,includeSelection=true,density=1){c.setTransform(density,0,0,density,0,0);c.fillStyle=model.background||'#f8fafb';c.fillRect(0,0,w,h);c.save();c.translate(v.x,v.y);c.scale(v.zoom,v.zoom);if(withGrid)drawGrid(c,w,h,v);for(const n of model.notes)drawNote(c,n,includeSelection&&selectedId===n.id);for(const s of model.strokes)drawStroke(c,s);if(includeSelection&&window.DrawNotesV5)window.DrawNotesV5.paintOverlay(c,v);c.restore()}
+function draw(){if(!ctx)return;paint(ctx,viewport.w,viewport.h,model.view,true,true,viewport.dpr);$('zoomValue').textContent=(model.view.zoom*100<1?(model.view.zoom*100).toFixed(1):Math.round(model.view.zoom*100))+'%';canvas.style.cursor=tool==='hand'||spaceHeld?'grab':tool==='select'?'default':tool==='eraser'?'cell':'crosshair'}
 function hit(w){for(let i=model.notes.length-1;i>=0;i--){const n=model.notes[i];if(w.x>=n.x&&w.x<=n.x+n.w&&w.y>=n.y&&w.y<=n.y+n.h){const r=22/model.view.zoom;if(selectedId===n.id&&Math.hypot(w.x-(n.x+n.w),w.y-(n.y+n.h))<=r)return{note:n,part:'resize'};return{note:n,part:w.y<=n.y+HEAD?'header':'body'}}}return null}
 function selectNote(n){selectedId=n?n.id:null;syncNotePanel();requestDraw()}
 function syncNotePanel(){const n=getNote(selectedId);$('notePanel').hidden=!n;if(!n)return;$('noteTitle').value=n.title;for(const b of document.querySelectorAll('.note-swatch'))b.setAttribute('aria-pressed',String(b.dataset.noteColor===n.color))}
-function setTool(t){tool=t;for(const b of document.querySelectorAll('.tool'))b.setAttribute('aria-pressed',String(b.dataset.tool===t));$('inkbar').style.display=t==='pen'||t==='marker'||t==='eraser'?'flex':'none';$('inkLabel').textContent=t==='eraser'?'ЛАСТИК':'ЧЕРНИЛА';$('size').max=t==='eraser'?'40':'16';$('size').min=t==='eraser'?'8':'2';if(t==='eraser'&&brushSize<8)brushSize=18;$('size').value=brushSize;$('sizeValue').textContent=brushSize+' px';$('inkSwatches').style.opacity=t==='eraser'?'.35':'1';$('inkSwatches').style.pointerEvents=t==='eraser'?'none':'auto';requestDraw()}
+function setTool(t){tool=t;for(const b of document.querySelectorAll('.tool'))b.setAttribute('aria-pressed',String(b.dataset.tool===t));$('inkbar').style.display=t==='pen'||t==='marker'||t==='eraser'?'flex':'none';$('inkLabel').textContent=t==='eraser'?'ЛАСТИК':'ЧЕРНИЛА';$('size').max=t==='eraser'?'40':'16';$('size').min=t==='eraser'?'8':'2';if(t==='eraser'&&brushSize<8)brushSize=18;$('size').value=brushSize;$('sizeValue').textContent=brushSize+' px';$('inkSwatches').style.opacity=t==='eraser'?'.35':'1';$('inkSwatches').style.pointerEvents=t==='eraser'?'none':'auto';window.DrawNotesAPI?.onToolChange?.(t);requestDraw()}
 function addNote(){const before=snap();const center=W(viewport.w/2,viewport.h/2);const k=model.notes.length%5;const n={id:id(),x:center.x-160+18*k,y:center.y-140+16*k,w:320,h:280,title:'Новая заметка',color:['lemon','mint','sky','lilac','rose'][model.notes.length%5],text:'',strokes:[]};model.notes.push(n);selectNote(n);commit(before);notify('Стикер готов — пиши Apple Pencil ✎')}
 function bringToFront(n){const ix=model.notes.indexOf(n);if(ix!==-1){model.notes.splice(ix,1);model.notes.push(n)}}
 function startMoveNote(n,evt,id){selectNote(n);const before=snap();bringToFront(n);const w=W(evt.clientX,evt.clientY);gesture={type:'move',id,noteId:n.id,start:w,x:n.x,y:n.y,before,changed:false}}
@@ -340,6 +342,7 @@ function pointerDown(e){if(!started||e.button!==undefined&&e.button!==0)return; 
  const w=W(e.clientX,e.clientY),h=hit(w);
  if(isTouch){if(h?.part==='header')startMoveNote(h.note,e,e.pointerId);else{if(h?.note)selectNote(h.note);startPan(e,e.pointerId)}return}
  if(spaceHeld||tool==='hand'){startPan(e,e.pointerId);return}
+  if(tool==='lasso'){window.DrawNotesV5?.beginLasso(e,e.pointerId);return}
  if(tool==='select'){if(h){if(h.part==='resize')startResizeNote(h.note,e,e.pointerId);else startMoveNote(h.note,e,e.pointerId)}else{selectNote(null);startPan(e,e.pointerId)}return}
  if(tool==='pen'||tool==='marker'||tool==='eraser'){startInk(e,e.pointerId,pt);$('inputHint').textContent=pt==='pen'?' · Pencil распознан ✎':pt==='mouse'?' · Мышь рисует':' · Рисование'}
 }
@@ -350,7 +353,8 @@ function beginPinch(){if(pointerTouches.size<2)return;const p=[...pointerTouches
 }
 function updatePinch(){if(!pinch||pointerTouches.size<2)return;const p=[...pointerTouches.values()].slice(0,2);const midX=(p[0].x+p[1].x)/2,midY=(p[0].y+p[1].y)/2;const dist=Math.max(4,Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y));const z=max(pinch.zoom*dist/pinch.dist,MIN_ZOOM,MAX_ZOOM);model.view.zoom=z;model.view.x=midX-pinch.world.x*z;model.view.y=midY-pinch.world.y*z;requestDraw()}
 function pointerMove(e){if(!started)return;const pt=e.pointerType||'mouse';if(pt==='touch'&&pointerTouches.has(e.pointerId)){pointerTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pinch){if(e.cancelable)e.preventDefault();updatePinch();return}}
- if(!gesture||gesture.id!==e.pointerId)return;if(e.cancelable)e.preventDefault();const g=gesture;
+ if(window.DrawNotesV5?.isLassoPointer(e.pointerId)){if(e.cancelable)e.preventDefault();window.DrawNotesV5.moveLasso(e);return}
+  if(!gesture||gesture.id!==e.pointerId)return;if(e.cancelable)e.preventDefault();const g=gesture;
  if(g.type==='draw'){addInkPoints(e)}
  else if(g.type==='erase'){eraseAt(e)}
  else if(g.type==='pan'){model.view.x=g.viewX+e.clientX-g.x;model.view.y=g.viewY+e.clientY-g.y;requestDraw()}
@@ -361,7 +365,8 @@ function finishGesture(){if(!gesture)return;const g=gesture;gesture=null;
  if(g.type==='draw'||g.type==='move'||g.type==='resize'||(g.type==='erase'&&g.changed))commit(g.before);
  else if(g.type==='pan')scheduleSave();requestDraw();
 }
-function pointerUp(e){if(e.pointerType==='touch'){pointerTouches.delete(e.pointerId);if(pinch){if(pointerTouches.size<2){pinch=null;gesture=null;scheduleSave()}return}}
+function pointerUp(e){if(window.DrawNotesV5?.isLassoPointer(e.pointerId)){window.DrawNotesV5.endLasso(e);try{canvas.releasePointerCapture(e.pointerId)}catch(_){}return}
+ if(e.pointerType==='touch'){pointerTouches.delete(e.pointerId);if(pinch){if(pointerTouches.size<2){pinch=null;gesture=null;scheduleSave()}return}}
  if(gesture?.id===e.pointerId){
   if(e.type!=='pointercancel'&&gesture.type==='draw')addInkPoints(e); // precise final tip
   if(e.type!=='pointercancel'&&gesture.type==='erase')eraseAt(e);
@@ -383,13 +388,13 @@ if(!window.PointerEvent){
 }else{
  // Некоторые версии WebKit называют стилус touch в PointerEvent, но stylus в TouchEvent.
  // Повышаем такой указатель до рисующего, не разрешая рисовать обычным пальцем.
- canvas.addEventListener('touchstart',e=>{for(const t of e.changedTouches){if(t.touchType!=='stylus')continue;const entry=[...pointerTouches.entries()].find(([,p])=>Math.hypot(p.x-t.clientX,p.y-t.clientY)<35);if(!entry)continue;const pid=entry[0];pointerTouches.delete(pid);if(pinch){pinch=null}if(gesture?.id===pid)gesture=null;const fake={pointerId:pid,pointerType:'pen',clientX:t.clientX,clientY:t.clientY,pressure:t.force||.5};if(tool!=='select'&&tool!=='hand')startInk(fake,pid,'pen');else if(tool==='select'){const h=hit(W(t.clientX,t.clientY));if(h)startMoveNote(h.note,fake,pid)}$('inputHint').textContent=' · Pencil распознан ✎'}},{passive:true});
+ canvas.addEventListener('touchstart',e=>{for(const t of e.changedTouches){if(t.touchType!=='stylus')continue;const entry=[...pointerTouches.entries()].find(([,p])=>Math.hypot(p.x-t.clientX,p.y-t.clientY)<35);if(!entry)continue;const pid=entry[0];pointerTouches.delete(pid);if(pinch){pinch=null}if(gesture?.id===pid)gesture=null;const fake={pointerId:pid,pointerType:'pen',clientX:t.clientX,clientY:t.clientY,pressure:t.force||.5};if(tool==='lasso')window.DrawNotesV5?.beginLasso(fake,pid);else if(tool!=='select'&&tool!=='hand')startInk(fake,pid,'pen');else if(tool==='select'){const h=hit(W(t.clientX,t.clientY));if(h)startMoveNote(h.note,fake,pid)}$('inputHint').textContent=' · Pencil распознан ✎'}},{passive:true});
 }
 // Указатель не влияет на страницу: отключаем выделение/контекстное меню только на холсте.
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 function setZoom(z,screenX=viewport.w/2,screenY=viewport.h/2){const w=W(screenX,screenY);model.view.zoom=max(z,MIN_ZOOM,MAX_ZOOM);model.view.x=screenX-w.x*model.view.zoom;model.view.y=screenY-w.y*model.view.zoom;requestDraw();scheduleSave()}
 function contentBounds(){const all=[];for(const n of model.notes)all.push([n.x,n.y,n.x+n.w,n.y+n.h]);for(const s of model.strokes)if(s.points.length){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const p of s.points){x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])}all.push([x0,y0,x1,y1])}if(!all.length)return null;return{x0:Math.min(...all.map(r=>r[0])),y0:Math.min(...all.map(r=>r[1])),x1:Math.max(...all.map(r=>r[2])),y1:Math.max(...all.map(r=>r[3]))}}
-function fitContent(){const b=contentBounds();if(!b){model.view={x:viewport.w/2,y:viewport.h/2,zoom:1}}else{const margin=105,z=max(Math.min((viewport.w-margin)/(b.x1-b.x0||1),(viewport.h-margin)/(b.y1-b.y0||1),1.3),MIN_ZOOM,MAX_ZOOM);model.view.zoom=z;model.view.x=viewport.w/2-(b.x0+b.x1)/2*z;model.view.y=viewport.h/2-(b.y0+b.y1)/2*z}requestDraw();scheduleSave()}
+function fitContent(){const b=contentBounds();if(!b){model.view={x:viewport.w/2,y:viewport.h/2,zoom:1}}else{const margin=Math.min(105,Math.min(viewport.w,viewport.h)*.18),z=max(Math.min((viewport.w-margin)/(b.x1-b.x0||1),(viewport.h-margin)/(b.y1-b.y0||1),1.3),MIN_ZOOM,MAX_ZOOM);model.view.zoom=z;model.view.x=viewport.w/2-(b.x0+b.x1)/2*z;model.view.y=viewport.h/2-(b.y0+b.y1)/2*z}requestDraw();scheduleSave()}
 function download(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000)}
 function dateStamp(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function hideMenu(){$('menu').hidden=true;$('menuToggle').setAttribute('aria-expanded','false')}
@@ -400,7 +405,7 @@ function exportPNG(){const b=contentBounds();if(!b){notify('На доске по
 for(const b of document.querySelectorAll('[data-tool]'))b.addEventListener('click',()=>setTool(b.dataset.tool));
 for(const b of document.querySelectorAll('[data-ink]'))b.addEventListener('click',()=>{ink=b.dataset.ink;for(const s of document.querySelectorAll('[data-ink]'))s.setAttribute('aria-pressed',String(s===b))});
 $('size').addEventListener('input',e=>{brushSize=Number(e.target.value);$('sizeValue').textContent=brushSize+' px'});
-$('addNote').addEventListener('click',addNote);$('undo').addEventListener('click',doUndo);$('redo').addEventListener('click',doRedo);$('center').addEventListener('click',fitContent);$('zoomIn').addEventListener('click',()=>setZoom(model.view.zoom*1.25));$('zoomOut').addEventListener('click',()=>setZoom(model.view.zoom/1.25));
+$('addNote').addEventListener('click',addNote);$('undo').addEventListener('click',doUndo);$('redo').addEventListener('click',doRedo);$('center').addEventListener('click',fitContent);$('zoomIn').addEventListener('click',()=>setZoom(model.view.zoom*(model.view.zoom<.1?1.6:1.25)));$('zoomOut').addEventListener('click',()=>setZoom(model.view.zoom/(model.view.zoom<=.1?1.6:1.25)));
 $('menuToggle').addEventListener('click',()=>{$('menu').hidden=!$('menu').hidden;$('menuToggle').setAttribute('aria-expanded',String(!$('menu').hidden))});
 $('exportJson').addEventListener('click',exportBackup);$('importJson').addEventListener('click',()=>{hideMenu();$('backupFile').click()});$('backupFile').addEventListener('change',e=>importBackup(e.target.files[0]));$('exportPng').addEventListener('click',exportPNG);
 $('clearAll').addEventListener('click',()=>{hideMenu();if(!confirm('Удалить ВСЕ стикеры и рисунки на доске? Отменить действие можно кнопкой «Назад».'))return;const before=snap();model.notes=[];model.strokes=[];selectNote(null);commit(before);notify('Доска очищена')});
@@ -429,7 +434,8 @@ document.addEventListener('keydown',e=>{
 canvas.addEventListener('wheel',e=>{if(e.cancelable)e.preventDefault();if(e.ctrlKey||e.metaKey){setZoom(model.view.zoom*Math.exp(-e.deltaY*.007),e.clientX,e.clientY)}else{model.view.x-=e.deltaX;model.view.y-=e.deltaY;requestDraw();scheduleSave()}},{passive:false});
 window.addEventListener('resize',resizeCanvas);window.addEventListener('pagehide',()=>{if(started){clearTimeout(savingTimer);if(db)writeDB(clone(model));else writeLocal(clone(model))}});
 window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&started)saveNow()});
-setTool('pen');boot();
+window.DrawNotesAPI={get model(){return model},get selectedId(){return selectedId},get ink(){return ink},get tool(){return tool},setInk:c=>{ink=c},setTool,requestDraw,notify,snap,commit,getNote,selectNote,syncNotePanel,id,W,cancelGesture:()=>{gesture=null;pinch=null;pointerTouches.clear()},onToolChange:null};
+ setTool('pen');boot();
 })();
 </script>
 
@@ -442,6 +448,197 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       .catch(error => console.warn('Offline installation unavailable:', error));
   });
 }
+</script>
+<script>
+/* Draw your notes v5 — HSB color laboratory and Apple Pencil lasso.
+   No third-party code or network calls. All data stays on-device. */
+(() => {
+'use strict';
+const app = window.DrawNotesAPI;
+if (!app) { console.error('Draw Notes v5: core unavailable'); return; }
+const $ = id => document.getElementById(id);
+const clamp = (n,a,b) => Math.max(a, Math.min(b,n));
+const isHex = x => typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x);
+const validColor = (x, fallback) => isHex(x) ? x.toLowerCase() : fallback;
+const rgb = hex => [1,3,5].map(i => parseInt(hex.slice(i,i+2),16));
+const hsv2hex = (h,s,v) => {
+ h=((h%360)+360)%360; s=clamp(s/100,0,1); v=clamp(v/100,0,1);
+ const c=v*s, x=c*(1-Math.abs((h/60)%2-1)), m=v-c;
+ const [r,g,b]=h<60?[c,x,0]:h<120?[x,c,0]:h<180?[0,c,x]:h<240?[0,x,c]:h<300?[x,0,c]:[c,0,x];
+ return '#'+[r,g,b].map(q=>Math.round((q+m)*255).toString(16).padStart(2,'0')).join('');
+};
+const hex2hsv = hex => {
+ const [r,g,b]=rgb(validColor(hex,'#ffffff')).map(v=>v/255);
+ const hi=Math.max(r,g,b), lo=Math.min(r,g,b), d=hi-lo;
+ let h=0;if(d){if(hi===r)h=((g-b)/d)%6;else if(hi===g)h=(b-r)/d+2;else h=(r-g)/d+4;h=(h*60+360)%360}
+ return {h:Math.round(h),s:Math.round(hi===0?0:d/hi*100),v:Math.round(hi*100)};
+};
+let mode='background', active=null;
+const style=document.createElement('style');
+style.textContent=`
+.hsb-open{height:31px;min-width:31px;border:1px solid #d7e4e5;border-radius:10px;background:linear-gradient(130deg,#ffacc8,#ffe9aa,#9de3dd,#aaa6f6);color:#253f46;font-size:11px;font-weight:750;padding:0 9px;flex:none}
+#noteHSB{width:100%;height:37px;margin-top:1px}
+.hsb-overlay{position:fixed;z-index:65;inset:0;background:rgba(26,43,49,.40);display:grid;place-items:center;padding:16px;overscroll-behavior:contain}
+.hsb-overlay[hidden]{display:none}
+.hsb-dialog{background:#fff;border-radius:22px;width:min(410px,100%);padding:19px;box-shadow:0 16px 64px #273c4b33;display:flex;flex-direction:column;gap:14px;max-height:min(95vh,740px);overflow-y:auto}
+.hsb-dialog h2{font-size:19px;margin:0}.hsb-sub{font-size:12px;color:#778992;margin:0}
+.hsb-square{height:190px;width:100%;border-radius:14px;touch-action:none;position:relative;overflow:hidden;cursor:crosshair;border:1px solid #d3dfe0}
+.hsb-target{position:absolute;width:18px;height:18px;border:2.5px solid #fff;border-radius:100%;box-shadow:0 0 0 1px #28383a,0 1px 5px #3336;transform:translate(-50%,-50%);pointer-events:none}
+.hsb-row{display:flex;align-items:center;gap:10px}.hsb-row label{width:55px;font-size:12px;color:#667982;font-weight:650}.hsb-row input{flex:1;min-width:0;accent-color:#477e79;touch-action:pan-y}.hsb-row output{width:36px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums;color:#344c50}
+.hsb-hue{appearance:none;-webkit-appearance:none;height:14px;border-radius:12px;background:linear-gradient(90deg,red,#ff0,lime,cyan,blue,magenta,red)}
+.hsb-hue::-webkit-slider-thumb{appearance:none;width:23px;height:23px;border:3px solid white;border-radius:50%;background:transparent;box-shadow:0 0 0 1px #344a4e,0 2px 5px #3454}
+.hsb-preview{height:43px;border-radius:12px;border:1px solid #d5dfdf;display:flex;align-items:center;justify-content:flex-end;padding:6px 12px;font-size:12px;font-weight:750;font-family:ui-monospace,SFMono-Regular,monospace}
+.hsb-actions{display:flex;justify-content:flex-end;gap:10px}.hsb-actions button{padding:11px 17px;border-radius:11px;font-size:13px;font-weight:700;background:#eff5f4;color:#3b6564}.hsb-actions button.primary{background:#286e68;color:white}
+.lasso-actions{position:fixed;z-index:11;top:calc(96px + env(safe-area-inset-top));left:90px;max-width:min(660px,calc(100vw - 110px));display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;border:1px solid #dbe7e7;border-radius:15px;background:rgba(255,255,255,.97);box-shadow:0 9px 25px #40505526;backdrop-filter:blur(15px)}
+.lasso-actions[hidden]{display:none}.lasso-actions .lasso-label{font-size:11px;font-weight:650;color:#4d7b79;padding:0 4px;white-space:nowrap}
+.lasso-actions button{background:#e9f5f2;color:#2d625e;border-radius:9px;padding:8px 10px;min-height:34px;font-size:12px;font-weight:700;white-space:nowrap}.lasso-actions button:disabled{opacity:.38}.lasso-actions button.danger{background:#fcebec;color:#b45561}
+@media(max-width:720px){.lasso-actions{top:auto;bottom:calc(127px + env(safe-area-inset-bottom));left:8px;right:8px;max-width:none;justify-content:center;padding:7px;gap:5px}.lasso-actions .lasso-label{width:100%;text-align:center}.lasso-actions button{font-size:11px;padding:7px 9px}.hsb-square{height:185px}.hsb-dialog{padding:16px}}
+`;
+document.head.append(style);
+
+// Color picker: a real HSB square (S horizontal, B vertical), hue, S and B controls.
+const overlay=document.createElement('div');overlay.className='hsb-overlay';overlay.hidden=true;overlay.innerHTML=`<section class="hsb-dialog" role="dialog" aria-modal="true" aria-labelledby="hsbTitle"><h2 id="hsbTitle">Цвет по HSB</h2><p class="hsb-sub">Выбери оттенок (Hue), насыщенность (Saturation) и яркость (Brightness)</p><div id="hsbSquare" class="hsb-square" aria-label="Насыщенность и яркость"><span id="hsbTarget" class="hsb-target"></span></div><div class="hsb-row"><label for="hsbHue">H · тон</label><input class="hsb-hue" id="hsbHue" type="range" min="0" max="359"><output id="hsbHValue"></output></div><div class="hsb-row"><label for="hsbSat">S · цвет</label><input id="hsbSat" type="range" min="0" max="100"><output id="hsbSValue"></output></div><div class="hsb-row"><label for="hsbBright">B · свет</label><input id="hsbBright" type="range" min="0" max="100"><output id="hsbBValue"></output></div><div class="hsb-preview" id="hsbPreview"></div><div class="hsb-actions"><button id="hsbCancel">Отмена</button><button class="primary" id="hsbApply">Применить цвет</button></div></section>`;
+document.body.append(overlay);
+const square=$('hsbSquare'),target=$('hsbTarget');
+let draft={h:170,s:60,v:95};
+function refresh(){
+ $('hsbHue').value=draft.h;$('hsbSat').value=draft.s;$('hsbBright').value=draft.v;
+ $('hsbHValue').textContent=draft.h+'°';$('hsbSValue').textContent=draft.s+'%';$('hsbBValue').textContent=draft.v+'%';
+ square.style.background=`linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,hsl(${draft.h} 100% 50%))`;
+ target.style.left=draft.s+'%';target.style.top=(100-draft.v)+'%';
+ const hex=hsv2hex(draft.h,draft.s,draft.v);
+ $('hsbPreview').style.background=hex;$('hsbPreview').style.color=draft.v<55?'white':'#20373c';$('hsbPreview').textContent=hex.toUpperCase();
+}
+function show(modeName){
+ mode=modeName;
+ let color=mode==='background'?(app.model.background||'#f8fafb'):mode==='ink'?app.ink:(app.getNote(app.selectedId)?.color||'#fff1c2');
+ if(!isHex(color)){const presets={lemon:'#fff1c2',mint:'#dff5eb',sky:'#e1f0ff',lilac:'#f0e5ff',rose:'#ffe6e8'};color=presets[color]||'#fff1c2'}
+ draft=hex2hsv(color);$('hsbTitle').textContent=mode==='background'?'Цвет фона доски · HSB':mode==='ink'?'Цвет Pencil / маркера · HSB':'Цвет стикера · HSB';
+ overlay.hidden=false;refresh();
+}
+function close(){overlay.hidden=true}
+overlay.addEventListener('pointerdown',e=>{if(e.target===overlay)close()});
+$('hsbCancel').addEventListener('click',close);
+for(const [id,key] of [['hsbHue','h'],['hsbSat','s'],['hsbBright','v']])$(id).addEventListener('input',e=>{draft[key]=+e.target.value;refresh()});
+function updateSquare(e){const r=square.getBoundingClientRect();draft.s=Math.round(clamp((e.clientX-r.left)/r.width,0,1)*100);draft.v=Math.round((1-clamp((e.clientY-r.top)/r.height,0,1))*100);refresh()}
+let squareId=null;square.addEventListener('pointerdown',e=>{e.preventDefault();squareId=e.pointerId;square.setPointerCapture?.(e.pointerId);updateSquare(e)});
+square.addEventListener('pointermove',e=>{if(squareId===e.pointerId)updateSquare(e)});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])square.addEventListener(event,e=>{if(squareId===e.pointerId){if(event==='pointerup')updateSquare(e);squareId=null}});
+function updateInkSwatches(){for(const b of document.querySelectorAll('[data-ink]'))b.setAttribute('aria-pressed',String(b.dataset.ink===app.ink));$('inkHSB').style.background=app.ink;$('inkHSB').style.color=hex2hsv(app.ink).v<55?'white':'#203c44'}
+function apply(){
+ const color=hsv2hex(draft.h,draft.s,draft.v);
+ if(mode==='background'){
+  const before=app.snap();app.model.background=color;app.commit(before);
+ }else if(mode==='ink'){
+  app.setInk(color);updateInkSwatches();
+ }else{
+  const n=app.getNote(app.selectedId);if(n){const before=app.snap();n.color=color;app.commit(before);app.syncNotePanel()}
+ }
+ close();app.requestDraw();
+}
+$('hsbApply').addEventListener('click',apply);
+
+const inkHSB=document.createElement('button');inkHSB.id='inkHSB';inkHSB.className='hsb-open';inkHSB.textContent='HSB';inkHSB.title='Любой HSB цвет для Pencil или маркера';inkHSB.addEventListener('click',()=>show('ink'));$('inkSwatches').after(inkHSB);
+const noteHSB=document.createElement('button');noteHSB.id='noteHSB';noteHSB.className='hsb-open';noteHSB.textContent='◉ Выбрать любой цвет HSB';noteHSB.addEventListener('click',()=>show('sticker'));$('noteColors').after(noteHSB);
+const bgButton=document.createElement('button');bgButton.id='boardHSB';bgButton.textContent='◉   Цвет фона доски · HSB';bgButton.addEventListener('click',()=>{if($('menu'))$('menu').hidden=true;show('background')});$('exportPng').after(bgButton);
+let inkColors={pen:'#2d414a',marker:'#d86b72'};
+try{const saved=JSON.parse(localStorage.getItem('draw-notes-v5-ink')||'null');if(saved){inkColors.pen=validColor(saved.pen,inkColors.pen);inkColors.marker=validColor(saved.marker,inkColors.marker)}}catch(e){}
+function saveInk(){try{localStorage.setItem('draw-notes-v5-ink',JSON.stringify(inkColors))}catch(e){}}
+app.onToolChange=t=>{
+ if(t==='pen'||t==='marker'){app.setInk(inkColors[t]);updateInkSwatches()}
+ if(t!=='lasso')setSelection(null);
+ refreshBar();
+};
+for(const b of document.querySelectorAll('[data-ink]'))b.addEventListener('click',()=>{
+ if(app.tool==='pen'||app.tool==='marker'){inkColors[app.tool]=b.dataset.ink;saveInk()}updateInkSwatches();
+});
+$('hsbApply').addEventListener('click',()=>{if(mode==='ink'&&(app.tool==='pen'||app.tool==='marker')){inkColors[app.tool]=app.ink;saveInk()}});
+
+// Lasso is an object-aware selection, not a bitmap cutout. Entire notes are
+// selected as units; ink strokes can be selected on canvas or inside a note.
+let lassoPointer=null,selection=null,clipboard=null,pasteCount=0;
+const rail=$('board').parentNode.parentNode.querySelector('.rail')||document.querySelector('.rail');
+const lassoButton=document.createElement('button');lassoButton.className='tool';lassoButton.dataset.tool='lasso';lassoButton.setAttribute('aria-label','Лассо · выделить Pencil');lassoButton.setAttribute('aria-pressed','false');lassoButton.innerHTML='<svg viewBox="0 0 24 24"><path d="M7 7C-1 12 3 22 13 19c8-3 11-13 1-15C6 2 3 10 8 13s8 0 5-3"/><circle cx="12" cy="17" r="2"/></svg><span class="tool-tip">Лассо · Pencil</span>';
+const selectButton=rail.querySelector('[data-tool="select"]');selectButton.after(lassoButton);
+lassoButton.addEventListener('click',()=>app.setTool('lasso'));
+const bar=document.createElement('div');bar.id='lassoActions';bar.className='lasso-actions';bar.hidden=true;
+bar.innerHTML='<span class="lasso-label" id="lassoLabel">Обведи объекты Apple Pencil</span><button id="lassoCopy">▤ Копировать</button><button id="lassoPaste">⧉ Вставить</button><button id="lassoDelete" class="danger">⌫ Удалить</button><button id="lassoClear">✕ Снять</button>';
+document.body.append(bar);
+const empty=()=>({notes:new Set(),global:new Set(),local:new Set()});
+const count=sel=>sel?sel.notes.size+sel.global.size+sel.local.size:0;
+function refreshBar(){bar.hidden=app.tool!=='lasso';$('lassoLabel').textContent=count(selection)?`Выбрано: ${count(selection)}`:'Обведи Pencil нужные линии или стикеры';$('lassoCopy').disabled=!count(selection);$('lassoDelete').disabled=!count(selection);$('lassoPaste').disabled=!clipboard}
+function setSelection(sel){selection=sel;refreshBar();app.requestDraw()}
+function inside(p,poly){let yes=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+ const a=poly[i],b=poly[j];if(((a.y>p.y)!==(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x))yes=!yes;
+ }return yes}
+function cross(a,b,c,d){const ccw=(p,q,r)=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);const ab=ccw(a,b,c),ba=ccw(a,b,d),cd=ccw(c,d,a),dc=ccw(c,d,b);return ab*ba<=0&&cd*dc<=0}
+function touchesPolygon(a,b,poly){for(let j=0;j<poly.length;j++)if(cross(a,b,poly[j],poly[(j+1)%poly.length]))return true;return false}
+function strokeWithin(stroke,poly,note){const ps=stroke.points||[];const x=note?.x||0,y=note?.y||0;if(!ps.length)return false;
+ let prev=null;for(const p of ps){const now={x:p[0]+x,y:p[1]+y};if(inside(now,poly))return true;if(prev&&touchesPolygon(prev,now,poly))return true;prev=now}return false}
+function selectedByPolygon(poly){const result=empty();for(const n of app.model.notes){
+ const center={x:n.x+n.w/2,y:n.y+n.h/2};
+ if(inside(center,poly)){result.notes.add(n.id);continue}
+ for(const s of n.strokes)if(strokeWithin(s,poly,n))result.local.add(n.id+':'+s.id);
+ }
+ for(const s of app.model.strokes)if(strokeWithin(s,poly,null))result.global.add(s.id);
+ return result;
+}
+function beginLasso(e,id){
+ if(app.tool!=='lasso')return;app.cancelGesture();app.selectNote(null);setSelection(null);
+ const w=app.W(e.clientX,e.clientY);lassoPointer={id,points:[w],last:w};app.requestDraw();
+}
+function moveLasso(e){if(!lassoPointer||lassoPointer.id!==e.pointerId)return;
+ const w=app.W(e.clientX,e.clientY),last=lassoPointer.last;if(Math.hypot(w.x-last.x,w.y-last.y)*app.model.view.zoom<1.4)return;
+ lassoPointer.points.push(w);lassoPointer.last=w;app.requestDraw();
+}
+function endLasso(e){if(!lassoPointer||lassoPointer.id!==e.pointerId)return;
+ moveLasso(e);const poly=lassoPointer.points;lassoPointer=null;
+ if(poly.length<3){setSelection(null);return}
+ setSelection(selectedByPolygon(poly));if(!count(selection))app.notify('Ничего не выделено. Обведи нужные линии или стикеры.');
+}
+function isLassoPointer(id){return lassoPointer?.id===id}
+function box(c,b,zoom){if(!b)return;const unit=1/zoom;c.save();c.lineWidth=Math.max(.3,1.7*unit);c.strokeStyle='#238b87';c.setLineDash([7*unit,4*unit]);c.fillStyle='rgba(50,185,168,.045)';c.fillRect(b.x-4*unit,b.y-4*unit,b.w+8*unit,b.h+8*unit);c.strokeRect(b.x-4*unit,b.y-4*unit,b.w+8*unit,b.h+8*unit);c.restore()}
+function strokeBox(st,n){const p=st.points;if(!p?.length)return null;let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;for(const q of p){x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1])}return{x:x0+(n?.x||0),y:y0+(n?.y||0),w:x1-x0,h:y1-y0}}
+function paintOverlay(c,v){if(lassoPointer){const p=lassoPointer.points;if(p.length){c.save();c.beginPath();c.moveTo(p[0].x,p[0].y);for(const v of p.slice(1))c.lineTo(v.x,v.y);c.lineWidth=2/v.zoom;c.setLineDash([7/v.zoom,5/v.zoom]);c.strokeStyle='#248c88';c.stroke();if(p.length>2){c.closePath();c.fillStyle='rgba(71,187,170,.08)';c.fill()}c.restore()}}
+ if(!selection||!count(selection))return;
+ for(const n of app.model.notes){if(selection.notes.has(n.id))box(c,{x:n.x,y:n.y,w:n.w,h:n.h},v.zoom);else for(const s of n.strokes)if(selection.local.has(n.id+':'+s.id))box(c,strokeBox(s,n),v.zoom)}
+ for(const s of app.model.strokes)if(selection.global.has(s.id))box(c,strokeBox(s),v.zoom);
+}
+function collect(){if(!count(selection))return null;const notes=[],strokes=[];
+ for(const n of app.model.notes){if(selection.notes.has(n.id))notes.push(JSON.parse(JSON.stringify(n)));else for(const s of n.strokes)if(selection.local.has(n.id+':'+s.id)){
+ const copy=JSON.parse(JSON.stringify(s));copy.points=copy.points.map(p=>[p[0]+n.x,p[1]+n.y,p[2]]);strokes.push(copy)}
+ }
+ for(const s of app.model.strokes)if(selection.global.has(s.id))strokes.push(JSON.parse(JSON.stringify(s)));
+ return {notes,strokes};
+}
+function copySelected(){const x=collect();if(!x)return;clipboard=x;pasteCount=0;refreshBar();app.notify(`Скопировано ${count(selection)} объектов`)}
+function pasteSelected(){if(!clipboard)return;const before=app.snap(),next=empty();pasteCount++;const offset=36*pasteCount/app.model.view.zoom;
+ for(const n of clipboard.notes){const q=JSON.parse(JSON.stringify(n));q.id=app.id();q.x+=offset;q.y+=offset;q.strokes.forEach(s=>s.id=app.id());app.model.notes.push(q);next.notes.add(q.id)}
+ for(const s of clipboard.strokes){const q=JSON.parse(JSON.stringify(s));q.id=app.id();q.points=q.points.map(p=>[p[0]+offset,p[1]+offset,p[2]]);app.model.strokes.push(q);next.global.add(q.id)}
+ app.commit(before);setSelection(next);app.notify('Вставлено на доску ✦')
+}
+function deleteSelected(){if(!count(selection))return;
+ const before=app.snap();app.model.notes=app.model.notes.filter(n=>!selection.notes.has(n.id));
+ app.model.strokes=app.model.strokes.filter(s=>!selection.global.has(s.id));
+ for(const n of app.model.notes)n.strokes=n.strokes.filter(s=>!selection.local.has(n.id+':'+s.id));
+ app.commit(before);setSelection(null);app.notify('Выделенное удалено · можно отменить');
+}
+$('lassoCopy').addEventListener('click',copySelected);$('lassoPaste').addEventListener('click',pasteSelected);
+$('lassoDelete').addEventListener('click',deleteSelected);$('lassoClear').addEventListener('click',()=>setSelection(null));
+document.addEventListener('keydown',e=>{
+ if(!overlay.hidden){if(e.key==='Escape'){e.preventDefault();close()}return}
+ if(['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))return;
+ if(app.tool!=='lasso')return;
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='c'&&count(selection)){e.preventDefault();copySelected()}
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='v'&&clipboard){e.preventDefault();pasteSelected()}
+ if((e.key==='Backspace'||e.key==='Delete')&&count(selection)){e.preventDefault();deleteSelected()}
+ if(e.key==='Escape'){setSelection(null)}
+});
+for(const id of ['undo','redo','clearAll'])$(id).addEventListener('click',()=>setSelection(null));
+window.DrawNotesV5={beginLasso,moveLasso,endLasso,isLassoPointer,paintOverlay};
+app.setTool('pen');refreshBar();
+})();
+
 </script>
 </body>
 </html>
