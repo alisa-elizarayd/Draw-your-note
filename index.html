@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f7fafb">
+<title>Draw your notes — Apple Pencil</title>
+<meta name="description" content="A beautiful offline whiteboard for handwritten Apple Pencil notes and colorful sticky notes.">
+<meta name="application-name" content="Draw your notes">
+<meta name="apple-mobile-web-app-title" content="Draw Notes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="icon" href="./icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png" sizes="180x180">
+<style>
+:root{color-scheme:light;--ink:#263641;--muted:#84949e;--line:#e5ebee;--surface:#fff;--mint:#d7f2ec;--accent:#226d67;--shadow:0 14px 40px rgba(47,69,81,.10),0 2px 8px rgba(47,69,81,.035)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;background:#f7fafb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);-webkit-user-select:none;user-select:none}button,input,textarea{font:inherit}button{cursor:pointer;border:0;touch-action:manipulation}button:disabled{opacity:.3;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #96d7ce;outline-offset:3px}button svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.85;stroke-linecap:round;stroke-linejoin:round;fill:none;flex:none}
+#stage{position:fixed;inset:0;overflow:hidden;touch-action:none;background:radial-gradient(ellipse at 70% 12%,#ffffff 0,#f8fafb 58%,#f4f8f9 100%);cursor:crosshair}#board{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:inherit}
+.topbar{position:fixed;z-index:10;top:calc(14px + env(safe-area-inset-top));left:20px;right:20px;min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;pointer-events:none}.topbar>*{pointer-events:auto}.brand,.top-actions,.panel,.rail,.inkbar,.status,.zoom-box,.note-panel,.add-button,.tip{background:rgba(255,255,255,.96);border:1px solid rgba(221,231,234,.95);box-shadow:var(--shadow);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}.brand{height:54px;padding:8px 15px 8px 9px;display:flex;align-items:center;gap:10px;border-radius:18px;white-space:nowrap}.brand-mark{width:35px;height:35px;background:#e5f5ef;border-radius:11px;display:grid;place-items:center;font-size:22px;transform:rotate(-4deg)}.brand-text{display:flex;flex-direction:column;gap:2px}.brand strong{font-size:15px;letter-spacing:-.5px}.brand small{color:var(--muted);font-size:10px;letter-spacing:.2px}.top-actions{display:flex;align-items:center;gap:4px;border-radius:17px;padding:6px}.icon-btn{width:40px;height:40px;border-radius:12px;background:transparent;color:#546771;display:grid;place-items:center}.icon-btn:hover:not(:disabled),.tool:hover,.round-btn:hover{background:#f0f6f5}.icon-btn:active,.tool:active{transform:scale(.95)}.divider-v{width:1px;height:24px;background:#e5ebee;margin:0 3px}.menu-container{position:relative}.menu{position:absolute;top:50px;right:0;background:#fff;border:1px solid var(--line);padding:7px;border-radius:15px;min-width:228px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px}.menu[hidden]{display:none}.menu button{background:transparent;border-radius:9px;padding:10px;text-align:left;font-size:13px;color:#314651;display:flex;gap:9px;align-items:center}.menu button:hover{background:#eef7f5}.menu button.danger{color:#ba5961}
+.rail{position:fixed;z-index:8;top:50%;left:20px;transform:translateY(-50%);display:flex;flex-direction:column;gap:5px;padding:7px;border-radius:19px}.tool{width:48px;height:47px;display:flex;align-items:center;justify-content:center;border-radius:13px;background:transparent;color:#61737d;position:relative}.tool svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-linejoin:round;stroke-linecap:round;stroke-width:1.9}.tool[aria-pressed=true]{background:#dff2ed;color:#236e69}.tool .tool-tip{display:none;position:absolute;left:59px;top:50%;transform:translateY(-50%);padding:8px 10px;background:#243c40;color:white;border-radius:9px;font-size:12px;white-space:nowrap;pointer-events:none}.tool:hover .tool-tip{display:block}.rail-line{height:1px;margin:3px 8px;background:#e4ebed}
+.inkbar{position:fixed;z-index:8;left:90px;bottom:calc(27px + env(safe-area-inset-bottom));height:56px;padding:6px 11px;display:flex;align-items:center;gap:9px;border-radius:17px}.inkbar .bar-label{font-size:11px;font-weight:650;color:#83939b;margin-right:3px}.swatches{display:flex;align-items:center;gap:5px}.swatch,.note-swatch{border-radius:50%;padding:0;flex:none;position:relative}.swatch{width:24px;height:24px;border:2px solid #fff;box-shadow:0 0 0 1px #e9eeef}.swatch[aria-pressed=true]:after{content:"";position:absolute;inset:-5px;border:2px solid #6da9a1;border-radius:50%}.size-range{width:78px;accent-color:#4b8e85;cursor:pointer}.size-label{font-size:11px;color:#7e9099;min-width:24px}
+.note-panel{position:fixed;z-index:9;right:20px;top:calc(86px + env(safe-area-inset-top));width:275px;padding:16px;border-radius:20px;display:flex;flex-direction:column;gap:12px}.note-panel[hidden]{display:none}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.panel-head strong{font-size:13px}.small-close{border:0;background:transparent;color:#7b8b96;font-size:21px;width:30px;height:30px;border-radius:8px}.small-close:hover{background:#f1f4f5}.field-label{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:#8a989f}.title-input{width:100%;height:41px;border:1px solid var(--line);border-radius:11px;padding:0 11px;color:#334550;background:#fafcfc;font-size:14px;min-width:0;-webkit-user-select:text;user-select:text}.note-colors{display:flex;gap:9px}.note-swatch{width:27px;height:27px;border:2px solid #fff;box-shadow:0 0 0 1px #e8ebed}.note-swatch[aria-pressed=true]:after{content:"";position:absolute;inset:-4px;border:2px solid #5b9990;border-radius:50%}.panel-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.panel-btn{background:#f3f7f7;color:#46646a;border-radius:11px;padding:10px 7px;font-size:12px;font-weight:650}.panel-btn:hover{background:#e7f0ee}.panel-btn.danger{color:#b45761;background:#fff1f2}.panel-foot{font-size:10px;line-height:1.5;color:#9ca7aa}
+.add-button{position:fixed;z-index:8;right:24px;bottom:calc(26px + env(safe-area-inset-bottom));height:55px;padding:0 22px;border-radius:17px;background:#276f68;color:white;display:flex;align-items:center;gap:10px;box-shadow:0 12px 28px rgba(40,109,102,.2);border-color:#276f68;font-weight:700;font-size:14px}.add-button:hover{background:#1d6059}.add-button .plus{font-size:26px;font-weight:350;line-height:1}
+.bottomleft{position:fixed;bottom:calc(100px + env(safe-area-inset-bottom));left:20px;z-index:6;display:flex;align-items:center;gap:8px}.status{border-radius:12px;padding:10px 13px;font-size:11px;color:#7d9094;display:flex;align-items:center;gap:7px;white-space:nowrap}.status-dot{width:7px;height:7px;border-radius:50%;background:#71bbaa}.status-dot.bad{background:#d88a7c}.zoom-box{border-radius:12px;padding:6px 7px;display:flex;align-items:center;gap:3px}.zoom-box button{min-width:28px;height:26px;background:transparent;border-radius:8px;color:#63808a;font-size:16px}.zoom-box button:hover{background:#eef5f3}.zoom-box output{min-width:43px;text-align:center;font-size:11px;font-weight:700;color:#536a70}.hint{position:fixed;left:50%;top:48%;transform:translate(-50%,-50%);pointer-events:none;text-align:center;color:#a4b3b9;line-height:1.55;z-index:2;font-size:14px;max-width:270px}.hint strong{display:block;font-size:24px;color:#8fa5a9;font-weight:680;letter-spacing:-.6px;margin-bottom:7px}.hint[hidden]{display:none}.tip{position:fixed;z-index:7;left:90px;top:calc(87px + env(safe-area-inset-top));padding:10px 14px;border-radius:13px;color:#71858b;font-size:11px;max-width:340px}.tip strong{color:#286e67}.tip[hidden]{display:none}
+.toast{position:fixed;z-index:30;top:calc(88px + env(safe-area-inset-top));left:50%;transform:translateX(-50%) translateY(-8px);background:#263e42;color:white;max-width:min(90vw,560px);padding:11px 17px;border-radius:12px;font-size:13px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;text-align:center}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.overlay{position:fixed;z-index:40;inset:0;background:rgba(31,50,56,.34);display:flex;align-items:center;justify-content:center;padding:18px}.overlay[hidden]{display:none}.modal{width:min(100%,460px);background:white;border-radius:24px;padding:24px;box-shadow:0 24px 90px rgba(34,49,59,.18);display:flex;flex-direction:column;gap:14px}.modal h2{margin:0;font-size:21px;letter-spacing:-.5px}.modal p{margin:0;color:#8a9da4;font-size:12px;line-height:1.6}.modal textarea{width:100%;height:240px;resize:vertical;min-height:120px;border:1px solid #dce7e9;background:#fbfdfd;border-radius:13px;padding:13px;font-size:15px;line-height:1.5;color:#30444c;-webkit-user-select:text;user-select:text}.modal-actions{display:flex;justify-content:flex-end;gap:8px}.modal-actions button{padding:11px 17px;border-radius:11px;font-weight:650;font-size:13px}.btn-ghost{background:#f0f5f5;color:#526a70}.btn-primary{background:#286e68;color:#fff}
+@media(max-width:720px){.topbar{top:calc(8px + env(safe-area-inset-top));left:10px;right:10px}.brand{height:49px;padding:6px 11px 6px 6px}.brand-mark{width:33px;height:33px}.brand strong{font-size:13px}.brand small{font-size:9px}.top-actions{padding:4px;gap:1px}.icon-btn{width:34px;height:37px}.icon-btn svg{width:17px;height:17px}.rail{left:50%;top:auto;bottom:calc(13px + env(safe-area-inset-bottom));transform:translateX(-50%);flex-direction:row;padding:5px;gap:2px;border-radius:17px}.tool{width:44px;height:43px}.tool svg{width:20px;height:20px}.rail-line{height:26px;width:1px;margin:8px 2px}.tool .tool-tip{display:none!important}.inkbar{left:50%;transform:translateX(-50%);bottom:calc(72px + env(safe-area-inset-bottom));height:45px;gap:6px;padding:5px 9px}.inkbar .bar-label{display:none}.swatch{width:21px;height:21px}.size-range{width:62px}.add-button{bottom:calc(132px + env(safe-area-inset-bottom));right:12px;height:45px;padding:0 14px;border-radius:13px;font-size:12px}.bottomleft{bottom:calc(132px + env(safe-area-inset-bottom));left:9px;gap:5px}.status{padding:8px;font-size:10px}.zoom-box{padding:4px}.zoom-box output{min-width:34px}.note-panel{top:calc(66px + env(safe-area-inset-top));right:9px;width:min(245px,65vw);padding:12px;gap:9px}.panel-foot{display:none}.tip{display:none}.hint{top:41%}}
+@media(max-width:390px){.brand small{display:none}.brand{gap:5px}.top-actions{gap:0}.icon-btn{width:31px}.status .save-word{display:none}.inkbar{gap:5px}.size-range{width:52px}.note-panel{width:215px}}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="board" aria-label="Бесконечная доска для рукописных заметок"></canvas></div>
+<div id="hint" class="hint"><strong>Твоя доска, твои идеи ✦</strong>Добавь стикер и пиши Apple Pencil. На свободном месте тоже можно рисовать.</div>
+<header class="topbar">
+  <div class="brand"><div class="brand-mark">✦</div><div class="brand-text"><strong>Draw your notes</strong><small>твоя творческая доска · offline</small></div></div>
+  <div class="top-actions">
+    <button class="icon-btn" id="undo" title="Отменить (⌘Z)" aria-label="Отменить" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
+    <button class="icon-btn" id="redo" title="Повторить (⌘⇧Z)" aria-label="Повторить" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5m5 5H10a6 6 0 0 0 0 12h2"/></svg></button>
+    <span class="divider-v"></span>
+    <button class="icon-btn" id="center" title="Показать все заметки" aria-label="Показать все заметки"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <div class="menu-container"><button class="icon-btn" id="menuToggle" title="Файлы и резервные копии" aria-label="Меню" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
+      <div id="menu" class="menu" hidden>
+        <button id="exportJson">↧ &nbsp;Скачать резервную копию</button>
+        <button id="importJson">↥ &nbsp;Восстановить из копии</button>
+        <button id="exportPng">▧ &nbsp;Сохранить доску как PNG</button>
+        <button class="danger" id="clearAll">✕ &nbsp;Очистить всю доску</button>
+      </div>
+    </div>
+  </div>
+</header>
+<nav class="rail" aria-label="Инструменты рисования">
+  <button class="tool" data-tool="pen" aria-label="Карандаш" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="m4 20 4.5-.8L20 7.7a2.7 2.7 0 0 0-3.8-3.8L4.8 15.3 4 20ZM14.5 5.7l3.8 3.8"/></svg><span class="tool-tip">Карандаш · Pencil</span></button>
+  <button class="tool" data-tool="marker" aria-label="Маркер" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="m4 15 6 6 10-10-6-6L4 15Zm0 0-2 7 8-1M12 7l6 6M4 22h16"/></svg><span class="tool-tip">Полупрозрачный маркер</span></button>
+  <button class="tool" data-tool="eraser" aria-label="Ластик" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="m18.8 4.2 1 1a3 3 0 0 1 0 4.2l-9.8 9.8H5.9l-3-3a3 3 0 0 1 0-4.2l7.8-7.8a3 3 0 0 1 4.2 0l3.9 0ZM8.5 10.5l7 7M10 19h11"/></svg><span class="tool-tip">Ластик · стирает часть линии</span></button>
+  <div class="rail-line"></div>
+  <button class="tool" data-tool="select" aria-label="Выделение и перемещение" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="m5 3 14 9-7 1.5-2.3 7L5 3Z"/></svg><span class="tool-tip">Выделить / передвинуть</span></button>
+  <button class="tool" data-tool="hand" aria-label="Рука и перемещение доски" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M8 13V5a2 2 0 0 1 4 0v7-8a2 2 0 0 1 4 0v8-6a2 2 0 0 1 4 0v9c0 4-3 7-7 7h-2c-3 0-5-2-7-5l-2-3a2 2 0 0 1 3-3l3 2"/></svg><span class="tool-tip">Перемещать доску</span></button>
+</nav>
+<div id="inkbar" class="inkbar"><span class="bar-label" id="inkLabel">ЧЕРНИЛА</span>
+  <div class="swatches" id="inkSwatches">
+    <button class="swatch" data-ink="#2d414a" style="background:#2d414a" title="Графит" aria-label="Графит" aria-pressed="true"></button>
+    <button class="swatch" data-ink="#257d79" style="background:#257d79" title="Морская волна" aria-label="Морская волна" aria-pressed="false"></button>
+    <button class="swatch" data-ink="#4376bd" style="background:#4376bd" title="Синий" aria-label="Синий" aria-pressed="false"></button>
+    <button class="swatch" data-ink="#b27abb" style="background:#b27abb" title="Сиреневый" aria-label="Сиреневый" aria-pressed="false"></button>
+    <button class="swatch" data-ink="#d86b72" style="background:#d86b72" title="Розовый" aria-label="Розовый" aria-pressed="false"></button>
+  </div>
+  <span class="divider-v"></span><input id="size" class="size-range" type="range" min="2" max="16" value="4" step="1" title="Толщина линии" aria-label="Толщина линии"><span id="sizeValue" class="size-label">4 px</span>
+</div>
+<section id="notePanel" class="note-panel" aria-label="Настройки стикера" hidden>
+  <div class="panel-head"><strong>✦ Твой стикер</strong><button id="closeNotePanel" class="small-close" aria-label="Закрыть">×</button></div>
+  <label class="field-label" for="noteTitle">Заголовок</label><input id="noteTitle" class="title-input" maxlength="64" value="" placeholder="Название">
+  <div class="field-label">Цвет стикера</div><div class="note-colors" id="noteColors">
+    <button class="note-swatch" data-note-color="lemon" style="background:#fff0ba" aria-label="Ванильный" aria-pressed="true"></button>
+    <button class="note-swatch" data-note-color="mint" style="background:#d7f3e8" aria-label="Мятный" aria-pressed="false"></button>
+    <button class="note-swatch" data-note-color="sky" style="background:#dceeff" aria-label="Голубой" aria-pressed="false"></button>
+    <button class="note-swatch" data-note-color="lilac" style="background:#efe2ff" aria-label="Лиловый" aria-pressed="false"></button>
+    <button class="note-swatch" data-note-color="rose" style="background:#ffe2e5" aria-label="Розовый" aria-pressed="false"></button>
+  </div>
+  <div class="panel-actions"><button class="panel-btn" id="editText">✎ Напечатать</button><button class="panel-btn" id="duplicate">▤ Копия</button><button class="panel-btn" id="front">↑ На передний план</button><button class="panel-btn danger" id="delete">⌫ Удалить</button></div>
+  <div class="panel-foot">Пиши Pencil прямо по стикеру — поверх напечатанного текста. Перемещай за верхнюю полоску пальцем или инструментом «Выделить».</div>
+</section>
+<div class="bottomleft"><div id="saveStatus" class="status"><span id="saveDot" class="status-dot"></span><span class="save-word" id="saveWord">Подключаем сохранение…</span><span id="inputHint"> · Apple Pencil пишет</span></div><div class="zoom-box"><button id="zoomOut" aria-label="Уменьшить масштаб">−</button><output id="zoomValue">100%</output><button id="zoomIn" aria-label="Увеличить масштаб">+</button></div></div>
+<button class="add-button" id="addNote"><span class="plus">+</span> Новый стикер</button>
+<div class="toast" id="toast" role="status"></div>
+<div id="editOverlay" class="overlay" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><h2 id="modalTitle">Текст стикера</h2><p>Пиши текст с клавиатуры или оставь поле пустым и рисуй прямо на стикере Apple Pencil. Можно сочетать оба способа.</p><textarea id="noteText" placeholder="Например:\n☐ Купить цветы\n☐ Позвонить бабушке\n☐ Выпить кофе"></textarea><div class="modal-actions"><button class="btn-ghost" id="cancelText">Отмена</button><button class="btn-primary" id="saveText">Готово</button></div></div></div>
+<input type="file" id="backupFile" accept=".json,application/json" hidden>
+<script>
+(() => {
+'use strict';
+// Всё внутри этого HTML: никаких серверов, библиотек, шрифтов и запросов к сети.
+const $ = id => document.getElementById(id);
+const canvas=$('board'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
+const PALETTE={
+  lemon:{fill:'#fff1c2',top:'#ffebad',edge:'#eadb9b'},
+  mint:{fill:'#dff5eb',top:'#d0f0e2',edge:'#c4e3d5'},
+  sky:{fill:'#e1f0ff',top:'#d6e9fc',edge:'#c7ddf1'},
+  lilac:{fill:'#f0e5ff',top:'#e9dafa',edge:'#dfd0ef'},
+  rose:{fill:'#ffe6e8',top:'#ffdce0',edge:'#f3d0d6'}
+};
+const HEAD=43, MIN_ZOOM=.32, MAX_ZOOM=3.2, DB_NAME='sticky-space-offline-v2', DB_KEY='main';
+let model={version:3,notes:[],strokes:[],nextId:1,view:{x:0,y:0,zoom:1}};
+let selectedId=null,tool='pen',ink='#2d414a',brushSize=4,gesture=null;
+let db=null,storageType='none',savingTimer=null,toastTimer=null,renderPending=false;
+let undo=[],redo=[],started=false,viewport={w:1,h:1,dpr:1},pointerTouches=new Map(),pinch=null,spaceHeld=false;
+const clone = a => JSON.parse(JSON.stringify(a));
+const snap=()=>clone({notes:model.notes,strokes:model.strokes,nextId:model.nextId});
+const max=(v,a,b)=>Math.min(b,Math.max(a,v));
+const getNote=id=>model.notes.find(n=>n.id===id);
+function id(){return model.nextId++}
+function notify(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2600)}
+function setStatus(s,good=true){$('saveWord').textContent=s;$('saveDot').classList.toggle('bad',!good)}
+function updateButtons(){$('undo').disabled=!undo.length;$('redo').disabled=!redo.length;$('hint').hidden=!!(model.notes.length||model.strokes.length)}
+function commit(before){
+  if(!before)return;
+  if(JSON.stringify(before)===JSON.stringify(snap()))return;
+  undo.push(before);if(undo.length>32)undo.shift();redo=[];updateButtons();scheduleSave();requestDraw();
+}
+function doUndo(){if(!undo.length)return;redo.push(snap());Object.assign(model,undo.pop());selectedId=null;syncNotePanel();updateButtons();scheduleSave();requestDraw()}
+function doRedo(){if(!redo.length)return;undo.push(snap());Object.assign(model,redo.pop());selectedId=null;syncNotePanel();updateButtons();scheduleSave();requestDraw()}
+function openDB(){return new Promise(resolve=>{
+ if(!('indexedDB' in window))return resolve(null);
+ let request,finished=false;
+ const finish=v=>{if(!finished){finished=true;resolve(v)}};
+ try{request=indexedDB.open(DB_NAME,1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('boards'))request.result.createObjectStore('boards')};request.onsuccess=()=>finish(request.result);request.onerror=()=>finish(null);request.onblocked=()=>finish(null)}catch(e){finish(null)}
+ setTimeout(()=>finish(null),2200);
+})}
+function readDB(){return new Promise(resolve=>{
+ if(!db)return resolve(null);
+ try{const t=db.transaction('boards','readonly');const r=t.objectStore('boards').get(DB_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>resolve(null)}catch(e){resolve(null)}
+})}
+function readLocal(){try{let s=localStorage.getItem(DB_NAME);return s?JSON.parse(s):null}catch(e){return null}}
+function writeDB(data){return new Promise(resolve=>{
+ if(!db)return resolve(false);
+ try{const t=db.transaction('boards','readwrite');t.objectStore('boards').put(data,DB_KEY);t.oncomplete=()=>resolve(true);t.onerror=()=>resolve(false);t.onabort=()=>resolve(false)}catch(e){resolve(false)}
+})}
+function writeLocal(data){try{localStorage.setItem(DB_NAME,JSON.stringify(data));return true}catch(e){return false}}
+function scheduleSave(){if(!started)return;setStatus('Сохранение…');clearTimeout(savingTimer);savingTimer=setTimeout(saveNow,650)}
+async function saveNow(){clearTimeout(savingTimer);if(!started)return;const data=clone(model);let okay=false;
+ if(db){okay=await writeDB(data);if(okay)storageType='indexedDB'}
+ if(!okay){okay=writeLocal(data);if(okay)storageType='localStorage'}
+ setStatus(okay?'Сохранено на устройстве':'Не удалось сохранить · сделай копию',okay);
+}
+function saneDoc(raw){
+ if(!raw||typeof raw!=='object'||!Array.isArray(raw.notes)||!Array.isArray(raw.strokes))return null;
+ const safeStroke=s=>({opacity:s.tool==='marker'?max(Number(s.opacity)||.22,.08,.55):1,id:Number.isFinite(s.id)?s.id:0,tool:s.tool==='marker'?'marker':'pen',color:typeof s.color==='string'?s.color:'#2d414a',width:max(Number(s.width)||4,1,40),points:(Array.isArray(s.points)?s.points:[]).filter(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1])).slice(0,35000).map(p=>[p[0],p[1],max(Number(p[2])||.5,.05,1)])});
+ const notes=raw.notes.slice(0,1200).filter(n=>Number.isFinite(n.x)&&Number.isFinite(n.y)).map(n=>({id:Number(n.id)||0,x:n.x,y:n.y,w:max(Number(n.w)||320,190,900),h:max(Number(n.h)||280,170,900),color:PALETTE[n.color]?n.color:'lemon',title:String(n.title||'Новая заметка').slice(0,64),text:String(n.text||'').slice(0,20000),strokes:(Array.isArray(n.strokes)?n.strokes:[]).slice(0,12000).map(safeStroke)}));
+ const strokes=raw.strokes.slice(0,25000).map(safeStroke);let nextId=Math.max(1,Number(raw.nextId)||1);for(const n of notes){nextId=Math.max(nextId,n.id+1);for(const st of n.strokes)nextId=Math.max(nextId,st.id+1)}for(const st of strokes)nextId=Math.max(nextId,st.id+1);
+ const v=raw.view||{};return{version:3,notes,strokes,nextId,view:{x:Number.isFinite(v.x)?v.x:0,y:Number.isFinite(v.y)?v.y:0,zoom:max(Number(v.zoom)||1,MIN_ZOOM,MAX_ZOOM)}};
+}
+async function boot(){
+  resizeCanvas();db=await openDB();const stored=await readDB()||readLocal();const clean=saneDoc(stored);
+  if(clean)model=clean;else model.view={x:viewport.w/2,y:viewport.h/2,zoom:1};
+  started=true;setStatus(db?'Сохранение включено':storageAvailable()?'Сохранение включено':'Сохранение недоступно',Boolean(db||storageAvailable()));
+  updateButtons();syncNotePanel();requestDraw();
+  if(!db&&!storageAvailable())notify('Хранилище браузера недоступно. Сохраняй копии через меню ···');
+}
+function storageAvailable(){try{const k='__sticky_test__';localStorage.setItem(k,'1');localStorage.removeItem(k);return true}catch(e){return false}}
+function resizeCanvas(){const rect=stage.getBoundingClientRect();viewport.w=Math.max(1,rect.width);viewport.h=Math.max(1,rect.height);viewport.dpr=Math.min(window.devicePixelRatio||1,3);canvas.width=Math.round(viewport.w*viewport.dpr);canvas.height=Math.round(viewport.h*viewport.dpr);canvas.style.width=viewport.w+'px';canvas.style.height=viewport.h+'px';requestDraw()}
+function requestDraw(){if(renderPending)return;renderPending=true;requestAnimationFrame(()=>{renderPending=false;draw()})}
+function roundPath(c,x,y,w,h,r){const q=Math.min(r,w/2,h/2);c.beginPath();c.moveTo(x+q,y);c.lineTo(x+w-q,y);c.quadraticCurveTo(x+w,y,x+w,y+q);c.lineTo(x+w,y+h-q);c.quadraticCurveTo(x+w,y+h,x+w-q,y+h);c.lineTo(x+q,y+h);c.quadraticCurveTo(x,y+h,x,y+h-q);c.lineTo(x,y+q);c.quadraticCurveTo(x,y,x+q,y);c.closePath()}
+function W(clientX,clientY){const r=canvas.getBoundingClientRect();return{x:(clientX-r.left-model.view.x)/model.view.zoom,y:(clientY-r.top-model.view.y)/model.view.zoom}}
+function S(x,y){return{x:x*model.view.zoom+model.view.x,y:y*model.view.zoom+model.view.y}}
+function drawGrid(c,w,h,v){const z=v.zoom;let step=32;while(step*z<18)step*=2;while(step*z>100)step/=2;
+ const left=-v.x/z,right=(w-v.x)/z,top=-v.y/z,bottom=(h-v.y)/z;
+ const a=Math.floor(left/step)*step,b=Math.floor(top/step)*step;
+ c.fillStyle='#dce6e8';c.globalAlpha=.75;
+ const count=((right-left)/step+2)*((bottom-top)/step+2);if(count<15000){
+  for(let x=a;x<=right;x+=step)for(let y=b;y<=bottom;y+=step){c.beginPath();c.arc(x,y,.9/z,0,Math.PI*2);c.fill()}
+ }c.globalAlpha=1;
+}
+// Draw each complete highlighter mark in ONE translucent pass. Painting segments
+// individually made their overlaps look almost opaque at every turn.
+// Quadratic curves + a light positional filter soften sharp Pencil corners.
+function drawStroke(c,s){
+ const src=s.points;if(!src?.length)return;
+ const isMarker=s.tool==='marker';
+ const alpha=isMarker?max(Number(s.opacity)||.22,.08,.55):1;
+ const pressure=src.reduce((sum,p)=>sum+(Number(p[2])||.5),0)/src.length;
+ const width=s.width*(isMarker?3.0:(.82+.34*pressure));
+ c.save();c.globalAlpha=alpha;c.lineWidth=width;c.lineCap='round';c.lineJoin='round';c.strokeStyle=s.color;c.fillStyle=s.color;
+ if(src.length===1){c.beginPath();c.arc(src[0][0],src[0][1],width/2,0,Math.PI*2);c.fill();c.restore();return}
+ // Keep first/last points exact; subtly smooth jitter between samples.
+ const pts=src.map((p,i)=>{
+  if(i===0||i===src.length-1)return p;
+  const a=src[i-1],b=src[i+1];
+  return [p[0]*.72+(a[0]+b[0])*.14,p[1]*.72+(a[1]+b[1])*.14,p[2]];
+ });
+ c.beginPath();c.moveTo(pts[0][0],pts[0][1]);
+ if(pts.length===2){c.lineTo(pts[1][0],pts[1][1])}
+ else{
+  for(let i=1;i<pts.length-1;i++){
+   const midX=(pts[i][0]+pts[i+1][0])/2;
+   const midY=(pts[i][1]+pts[i+1][1])/2;
+   c.quadraticCurveTo(pts[i][0],pts[i][1],midX,midY);
+  }
+  const last=pts[pts.length-1];c.quadraticCurveTo(last[0],last[1],last[0],last[1]);
+ }
+ c.stroke();c.restore();
+}
+function linesForText(c,text,maxWidth){const lines=[];String(text).split('\n').forEach(par=>{if(par===''){lines.push('');return}let line='';for(const word of par.split(/\s+/)){const maybe=line?line+' '+word:word;if(c.measureText(maybe).width<=maxWidth||!line){line=maybe}else{lines.push(line);line=word}if(c.measureText(line).width>maxWidth){let part='';for(const ch of line){if(c.measureText(part+ch).width>maxWidth&&part){lines.push(part);part=ch}else part+=ch}line=part}}lines.push(line)});return lines}
+function drawNote(c,n,selected){const p=PALETTE[n.color]||PALETTE.lemon;c.save();
+ c.shadowColor='rgba(62,76,90,.13)';c.shadowBlur=22;c.shadowOffsetY=7;roundPath(c,n.x,n.y,n.w,n.h,14);c.fillStyle=p.fill;c.fill();c.shadowColor='transparent';c.shadowBlur=0;c.shadowOffsetY=0;
+ roundPath(c,n.x,n.y,n.w,n.h,14);c.lineWidth=1;c.strokeStyle=p.edge;c.stroke();
+ c.save();roundPath(c,n.x,n.y,n.w,n.h,14);c.clip();c.fillStyle=p.top;c.fillRect(n.x,n.y,n.w,HEAD);c.restore();
+ c.beginPath();c.moveTo(n.x+15,n.y+HEAD+.5);c.lineTo(n.x+n.w-15,n.y+HEAD+.5);c.lineWidth=.8;c.strokeStyle='rgba(96,113,116,.13)';c.stroke();
+ c.fillStyle='#64747b';c.beginPath();c.arc(n.x+17,n.y+HEAD/2,4,0,Math.PI*2);c.fill();
+ c.fillStyle='#435960';c.textBaseline='middle';c.font='650 16px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+ let title=n.title||'Новая заметка';while(c.measureText(title).width>n.w-66&&title.length>2)title=title.slice(0,-2)+'…';c.fillText(title,n.x+31,n.y+HEAD/2+1);
+ c.save();c.beginPath();c.rect(n.x+8,n.y+HEAD+3,n.w-16,n.h-HEAD-10);c.clip();
+ if(n.text){c.fillStyle='#526268';c.font='15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';c.textBaseline='top';const lineH=23;let y=n.y+HEAD+17;for(const line of linesForText(c,n.text,n.w-34)){c.fillText(line,n.x+17,y);y+=lineH;if(y>n.y+n.h+lineH)break}}
+ // Note ink is foreground content, clipped only to the whole sticker (not
+ // to its text/body box), so handwriting may even annotate its heading.
+ c.restore();
+ c.save();roundPath(c,n.x,n.y,n.w,n.h,14);c.clip();
+ c.translate(n.x,n.y);for(const s of n.strokes)drawStroke(c,s);c.restore();
+ if(selected){c.strokeStyle='#65a99f';c.lineWidth=2.3/model.view.zoom;c.setLineDash([7/model.view.zoom,5/model.view.zoom]);roundPath(c,n.x-4/model.view.zoom,n.y-4/model.view.zoom,n.w+8/model.view.zoom,n.h+8/model.view.zoom,16);c.stroke();c.setLineDash([]);
+  c.fillStyle='#fff';c.strokeStyle='#47978a';c.lineWidth=1.7/model.view.zoom;const r=9/model.view.zoom;c.beginPath();c.arc(n.x+n.w,n.y+n.h,r,0,Math.PI*2);c.fill();c.stroke();c.strokeStyle='#589c93';c.beginPath();c.moveTo(n.x+n.w-r*.3,n.y+n.h+r*.3);c.lineTo(n.x+n.w+r*.3,n.y+n.h-r*.3);c.stroke()
+ }
+ c.restore()}
+function paint(c,w,h,v,withGrid=true,includeSelection=true,density=1){c.setTransform(density,0,0,density,0,0);c.fillStyle='#f8fafb';c.fillRect(0,0,w,h);c.save();c.translate(v.x,v.y);c.scale(v.zoom,v.zoom);if(withGrid)drawGrid(c,w,h,v);for(const n of model.notes)drawNote(c,n,includeSelection&&selectedId===n.id);for(const s of model.strokes)drawStroke(c,s);c.restore()}
+function draw(){if(!ctx)return;paint(ctx,viewport.w,viewport.h,model.view,true,true,viewport.dpr);$('zoomValue').textContent=Math.round(model.view.zoom*100)+'%';canvas.style.cursor=tool==='hand'||spaceHeld?'grab':tool==='select'?'default':tool==='eraser'?'cell':'crosshair'}
+function hit(w){for(let i=model.notes.length-1;i>=0;i--){const n=model.notes[i];if(w.x>=n.x&&w.x<=n.x+n.w&&w.y>=n.y&&w.y<=n.y+n.h){const r=22/model.view.zoom;if(selectedId===n.id&&Math.hypot(w.x-(n.x+n.w),w.y-(n.y+n.h))<=r)return{note:n,part:'resize'};return{note:n,part:w.y<=n.y+HEAD?'header':'body'}}}return null}
+function selectNote(n){selectedId=n?n.id:null;syncNotePanel();requestDraw()}
+function syncNotePanel(){const n=getNote(selectedId);$('notePanel').hidden=!n;if(!n)return;$('noteTitle').value=n.title;for(const b of document.querySelectorAll('.note-swatch'))b.setAttribute('aria-pressed',String(b.dataset.noteColor===n.color))}
+function setTool(t){tool=t;for(const b of document.querySelectorAll('.tool'))b.setAttribute('aria-pressed',String(b.dataset.tool===t));$('inkbar').style.display=t==='pen'||t==='marker'||t==='eraser'?'flex':'none';$('inkLabel').textContent=t==='eraser'?'ЛАСТИК':'ЧЕРНИЛА';$('size').max=t==='eraser'?'40':'16';$('size').min=t==='eraser'?'8':'2';if(t==='eraser'&&brushSize<8)brushSize=18;$('size').value=brushSize;$('sizeValue').textContent=brushSize+' px';$('inkSwatches').style.opacity=t==='eraser'?'.35':'1';$('inkSwatches').style.pointerEvents=t==='eraser'?'none':'auto';requestDraw()}
+function addNote(){const before=snap();const center=W(viewport.w/2,viewport.h/2);const k=model.notes.length%5;const n={id:id(),x:center.x-160+18*k,y:center.y-140+16*k,w:320,h:280,title:'Новая заметка',color:['lemon','mint','sky','lilac','rose'][model.notes.length%5],text:'',strokes:[]};model.notes.push(n);selectNote(n);commit(before);notify('Стикер готов — пиши Apple Pencil ✎')}
+function bringToFront(n){const ix=model.notes.indexOf(n);if(ix!==-1){model.notes.splice(ix,1);model.notes.push(n)}}
+function startMoveNote(n,evt,id){selectNote(n);const before=snap();bringToFront(n);const w=W(evt.clientX,evt.clientY);gesture={type:'move',id,noteId:n.id,start:w,x:n.x,y:n.y,before,changed:false}}
+function startResizeNote(n,evt,id){const before=snap();gesture={type:'resize',id,noteId:n.id,start:W(evt.clientX,evt.clientY),w:n.w,h:n.h,before,changed:false}}
+function startPan(evt,id){gesture={type:'pan',id,x:evt.clientX,y:evt.clientY,viewX:model.view.x,viewY:model.view.y}}
+function pointFor(e,target){
+ // Sampling at Pencil frequency must not trigger layout reads for every sample.
+ // The view is frozen during an ink gesture; cache its transform at pointerdown.
+ const t=target.transform;
+ const x=t?(e.clientX-t.left-t.viewX)/t.zoom:W(e.clientX,e.clientY).x;
+ const y=t?(e.clientY-t.top-t.viewY)/t.zoom:W(e.clientX,e.clientY).y;
+ return[x-(t?.noteX||0),y-(t?.noteY||0),max(Number(e.pressure)||.5,.08,1)]
+}
+function startInk(evt,pid,t){const w=W(evt.clientX,evt.clientY),hitNote=hit(w);const note=hitNote?.note||null;
+ if(note)selectNote(note);
+ if(tool==='eraser'){const before=snap();gesture={type:'erase',id:pid,noteId:note?.id||null,before,changed:false};eraseAt(evt);return}
+ const target=note?note.strokes:model.strokes;
+ const s={id:id(),tool:tool==='marker'?'marker':'pen',color:ink,width:brushSize,opacity:tool==='marker'?.22:1,points:[]};const before=snap();target.push(s);gesture={type:'draw',id:pid,noteId:note?.id||null,stroke:s,before,
+  transform:{left:canvas.getBoundingClientRect().left,top:canvas.getBoundingClientRect().top,
+   viewX:model.view.x,viewY:model.view.y,zoom:model.view.zoom,noteX:note?.x||0,noteY:note?.y||0}};addInkPoints(evt);requestDraw();
+}
+function addInkPoints(e){if(!gesture||gesture.type!=='draw')return;const events=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():[];const all=events.length?events:[e];let changed=false;
+ for(const sample of all){const point=pointFor(sample,gesture),arr=gesture.stroke.points,prev=arr[arr.length-1];if(!prev||Math.hypot(prev[0]-point[0],prev[1]-point[1])>.26/model.view.zoom){arr.push(point);changed=true}}
+ // Иногда coalesced events отсутствуют или заканчиваются раньше последнего события.
+ const point=pointFor(e,gesture),arr=gesture.stroke.points,prev=arr[arr.length-1];if(!prev||Math.hypot(prev[0]-point[0],prev[1]-point[1])>.26/model.view.zoom){arr.push(point);changed=true}
+ if(changed)requestDraw();
+}
+// The freehand layer is above notes, so an eraser must work across BOTH
+// layers, even when the gesture begins outside a sticker.
+function eraseList(strokes,x,y,r){
+ let changed=false;const output=[];
+ for(const s of strokes){
+  const pts=s.points;if(!pts?.length)continue;
+  let nearby=false;
+  for(const p of pts){if(Math.abs(p[0]-x)<r*2+14&&Math.abs(p[1]-y)<r*2+14){nearby=true;break}}
+  if(!nearby){output.push(s);continue}
+  const runs=[];let run=[],erased=false;
+  function put(p){
+   if(Math.hypot(p[0]-x,p[1]-y)<=r){if(run.length){runs.push(run);run=[]}erased=true}
+   else {const prior=run[run.length-1];if(!prior||Math.hypot(prior[0]-p[0],prior[1]-p[1])>.15)run.push(p)}
+  }
+  put(pts[0]);
+  for(let i=1;i<pts.length;i++){
+   const a=pts[i-1],b=pts[i],dist=Math.hypot(b[0]-a[0],b[1]-a[1]);
+   const num=Math.min(100,Math.max(1,Math.ceil(dist/Math.max(1.5,r*.3))));
+   for(let j=1;j<=num;j++){
+    const q=j/num;
+    put([a[0]+(b[0]-a[0])*q,a[1]+(b[1]-a[1])*q,(a[2]||.5)+((b[2]||.5)-(a[2]||.5))*q]);
+   }
+  }
+  if(run.length)runs.push(run);
+  if(erased){changed=true;for(const seq of runs)if(seq.length)output.push({...s,id:id(),points:seq})}
+  else output.push(s);
+ }
+ return{changed,output};
+}
+function eraseAt(e){
+ const g=gesture;if(!g||g.type!=='erase')return;
+ const w=W(e.clientX,e.clientY),r=brushSize*1.15/model.view.zoom;
+ let changed=false;
+ const global=eraseList(model.strokes,w.x,w.y,r);
+ if(global.changed){model.strokes=global.output;changed=true}
+ for(const n of model.notes){
+  if(w.x+r<n.x||w.x-r>n.x+n.w||w.y+r<n.y||w.y-r>n.y+n.h)continue;
+  const result=eraseList(n.strokes,w.x-n.x,w.y-n.y,r);
+  if(result.changed){n.strokes=result.output;changed=true}
+ }
+ if(changed){g.changed=true;requestDraw()}
+}
+function pointerDown(e){if(!started||e.button!==undefined&&e.button!==0)return; // Для iPad: только pointerType=pen рисует, touch лишь перемещает.
+ if(e.cancelable)e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(_e){}
+ const pt=e.pointerType||'mouse';const isTouch=pt==='touch';
+ if(isTouch){pointerTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointerTouches.size>=2){beginPinch();return}}
+ const w=W(e.clientX,e.clientY),h=hit(w);
+ if(isTouch){if(h?.part==='header')startMoveNote(h.note,e,e.pointerId);else{if(h?.note)selectNote(h.note);startPan(e,e.pointerId)}return}
+ if(spaceHeld||tool==='hand'){startPan(e,e.pointerId);return}
+ if(tool==='select'){if(h){if(h.part==='resize')startResizeNote(h.note,e,e.pointerId);else startMoveNote(h.note,e,e.pointerId)}else{selectNote(null);startPan(e,e.pointerId)}return}
+ if(tool==='pen'||tool==='marker'||tool==='eraser'){startInk(e,e.pointerId,pt);$('inputHint').textContent=pt==='pen'?' · Pencil распознан ✎':pt==='mouse'?' · Мышь рисует':' · Рисование'}
+}
+function beginPinch(){if(pointerTouches.size<2)return;const p=[...pointerTouches.values()].slice(0,2);const midX=(p[0].x+p[1].x)/2,midY=(p[0].y+p[1].y)/2;
+ if(gesture?.type==='draw'||gesture?.type==='erase')finishGesture();else if(gesture?.type==='move'||gesture?.type==='resize')finishGesture();else gesture=null;
+ const world=W(midX,midY);pinch={dist:Math.max(4,Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y)),zoom:model.view.zoom,world};
+}
+function updatePinch(){if(!pinch||pointerTouches.size<2)return;const p=[...pointerTouches.values()].slice(0,2);const midX=(p[0].x+p[1].x)/2,midY=(p[0].y+p[1].y)/2;const dist=Math.max(4,Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y));const z=max(pinch.zoom*dist/pinch.dist,MIN_ZOOM,MAX_ZOOM);model.view.zoom=z;model.view.x=midX-pinch.world.x*z;model.view.y=midY-pinch.world.y*z;requestDraw()}
+function pointerMove(e){if(!started)return;const pt=e.pointerType||'mouse';if(pt==='touch'&&pointerTouches.has(e.pointerId)){pointerTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pinch){if(e.cancelable)e.preventDefault();updatePinch();return}}
+ if(!gesture||gesture.id!==e.pointerId)return;if(e.cancelable)e.preventDefault();const g=gesture;
+ if(g.type==='draw'){addInkPoints(e)}
+ else if(g.type==='erase'){eraseAt(e)}
+ else if(g.type==='pan'){model.view.x=g.viewX+e.clientX-g.x;model.view.y=g.viewY+e.clientY-g.y;requestDraw()}
+ else if(g.type==='move'){const n=getNote(g.noteId);if(!n)return;const w=W(e.clientX,e.clientY);n.x=g.x+w.x-g.start.x;n.y=g.y+w.y-g.start.y;g.changed=true;requestDraw()}
+ else if(g.type==='resize'){const n=getNote(g.noteId);if(!n)return;const w=W(e.clientX,e.clientY);n.w=max(g.w+w.x-g.start.x,190,900);n.h=max(g.h+w.y-g.start.y,170,900);g.changed=true;requestDraw()}
+}
+function finishGesture(){if(!gesture)return;const g=gesture;gesture=null;
+ if(g.type==='draw'||g.type==='erase'||g.type==='move'||g.type==='resize')commit(g.before);
+ else if(g.type==='pan')scheduleSave();requestDraw();
+}
+function pointerUp(e){if(e.pointerType==='touch'){pointerTouches.delete(e.pointerId);if(pinch){if(pointerTouches.size<2){pinch=null;gesture=null;scheduleSave()}return}}
+ if(gesture?.id===e.pointerId)finishGesture();try{if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId)}catch(_e){}
+}
+canvas.addEventListener('pointerdown',pointerDown,{passive:false});canvas.addEventListener('pointermove',pointerMove,{passive:false});canvas.addEventListener('pointerup',pointerUp,{passive:false});canvas.addEventListener('pointercancel',pointerUp,{passive:false});canvas.addEventListener('lostpointercapture',e=>{if(gesture?.id===e.pointerId)finishGesture()});
+// Старый Safari: если PointerEvent отсутствует, определяем именно touchType="stylus".
+if(!window.PointerEvent){
+ const ev=(t,kind)=>({pointerId:t.identifier+100000,pointerType:t.touchType==='stylus'?'pen':'touch',clientX:t.clientX,clientY:t.clientY,pressure:t.force||.5,button:0,cancelable:true,preventDefault(){}});
+ canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.changedTouches)pointerDown(ev(t))},{passive:false});
+ canvas.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches)pointerMove(ev(t))},{passive:false});
+ canvas.addEventListener('touchend',e=>{e.preventDefault();for(const t of e.changedTouches)pointerUp(ev(t))},{passive:false});
+ canvas.addEventListener('touchcancel',e=>{e.preventDefault();for(const t of e.changedTouches)pointerUp(ev(t))},{passive:false});
+}else{
+ // Некоторые версии WebKit называют стилус touch в PointerEvent, но stylus в TouchEvent.
+ // Повышаем такой указатель до рисующего, не разрешая рисовать обычным пальцем.
+ canvas.addEventListener('touchstart',e=>{for(const t of e.changedTouches){if(t.touchType!=='stylus')continue;const entry=[...pointerTouches.entries()].find(([,p])=>Math.hypot(p.x-t.clientX,p.y-t.clientY)<35);if(!entry)continue;const pid=entry[0];pointerTouches.delete(pid);if(pinch){pinch=null}if(gesture?.id===pid)gesture=null;const fake={pointerId:pid,pointerType:'pen',clientX:t.clientX,clientY:t.clientY,pressure:t.force||.5};if(tool!=='select'&&tool!=='hand')startInk(fake,pid,'pen');else if(tool==='select'){const h=hit(W(t.clientX,t.clientY));if(h)startMoveNote(h.note,fake,pid)}$('inputHint').textContent=' · Pencil распознан ✎'}},{passive:true});
+}
+// Указатель не влияет на страницу: отключаем выделение/контекстное меню только на холсте.
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+function setZoom(z,screenX=viewport.w/2,screenY=viewport.h/2){const w=W(screenX,screenY);model.view.zoom=max(z,MIN_ZOOM,MAX_ZOOM);model.view.x=screenX-w.x*model.view.zoom;model.view.y=screenY-w.y*model.view.zoom;requestDraw();scheduleSave()}
+function contentBounds(){const all=[];for(const n of model.notes)all.push([n.x,n.y,n.x+n.w,n.y+n.h]);for(const s of model.strokes)if(s.points.length){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(const p of s.points){x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])}all.push([x0,y0,x1,y1])}if(!all.length)return null;return{x0:Math.min(...all.map(r=>r[0])),y0:Math.min(...all.map(r=>r[1])),x1:Math.max(...all.map(r=>r[2])),y1:Math.max(...all.map(r=>r[3]))}}
+function fitContent(){const b=contentBounds();if(!b){model.view={x:viewport.w/2,y:viewport.h/2,zoom:1}}else{const margin=105,z=max(Math.min((viewport.w-margin)/(b.x1-b.x0||1),(viewport.h-margin)/(b.y1-b.y0||1),1.3),MIN_ZOOM,MAX_ZOOM);model.view.zoom=z;model.view.x=viewport.w/2-(b.x0+b.x1)/2*z;model.view.y=viewport.h/2-(b.y0+b.y1)/2*z}requestDraw();scheduleSave()}
+function download(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000)}
+function dateStamp(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function hideMenu(){$('menu').hidden=true;$('menuToggle').setAttribute('aria-expanded','false')}
+function exportBackup(){download(`Стикерная-${dateStamp()}.json`,new Blob([JSON.stringify({app:'Стикерная',...model},null,2)],{type:'application/json'}));hideMenu();notify('Резервная копия скачана')}
+async function importBackup(file){if(!file)return;try{if(file.size>60*1024*1024)throw Error('Файл слишком большой');const parsed=JSON.parse(await file.text()),doc=saneDoc(parsed);if(!doc)throw Error('Это не резервная копия «Стикерной»');if(!confirm('Заменить текущую доску заметками из копии?'))return;model=doc;undo=[];redo=[];selectedId=null;pinch=null;gesture=null;syncNotePanel();updateButtons();requestDraw();await saveNow();notify('Доска восстановлена ✓')}catch(e){notify('Ошибка загрузки: '+e.message)}finally{$('backupFile').value=''}}
+function exportPNG(){const b=contentBounds();if(!b){notify('На доске пока нечего сохранять');return}const padding=55,bw=b.x1-b.x0+padding*2,bh=b.y1-b.y0+padding*2;const scale=Math.min(2,4096/Math.max(bw,bh));const w=Math.max(1,Math.round(bw*scale)),h=Math.max(1,Math.round(bh*scale));const out=document.createElement('canvas');out.width=w;out.height=h;const c=out.getContext('2d');paint(c,w,h,{x:(padding-b.x0)*scale,y:(padding-b.y0)*scale,zoom:scale},false,false);out.toBlob(blob=>{if(blob){download(`Моя-доска-${dateStamp()}.png`,blob);notify('Изображение PNG сохранено')}else notify('Не удалось создать PNG')},'image/png');hideMenu()}
+// UI
+for(const b of document.querySelectorAll('[data-tool]'))b.addEventListener('click',()=>setTool(b.dataset.tool));
+for(const b of document.querySelectorAll('[data-ink]'))b.addEventListener('click',()=>{ink=b.dataset.ink;for(const s of document.querySelectorAll('[data-ink]'))s.setAttribute('aria-pressed',String(s===b))});
+$('size').addEventListener('input',e=>{brushSize=Number(e.target.value);$('sizeValue').textContent=brushSize+' px'});
+$('addNote').addEventListener('click',addNote);$('undo').addEventListener('click',doUndo);$('redo').addEventListener('click',doRedo);$('center').addEventListener('click',fitContent);$('zoomIn').addEventListener('click',()=>setZoom(model.view.zoom*1.25));$('zoomOut').addEventListener('click',()=>setZoom(model.view.zoom/1.25));
+$('menuToggle').addEventListener('click',()=>{$('menu').hidden=!$('menu').hidden;$('menuToggle').setAttribute('aria-expanded',String(!$('menu').hidden))});
+$('exportJson').addEventListener('click',exportBackup);$('importJson').addEventListener('click',()=>{hideMenu();$('backupFile').click()});$('backupFile').addEventListener('change',e=>importBackup(e.target.files[0]));$('exportPng').addEventListener('click',exportPNG);
+$('clearAll').addEventListener('click',()=>{hideMenu();if(!confirm('Удалить ВСЕ стикеры и рисунки на доске? Отменить действие можно кнопкой «Назад».'))return;const before=snap();model.notes=[];model.strokes=[];selectNote(null);commit(before);notify('Доска очищена')});
+$('closeNotePanel').addEventListener('click',()=>selectNote(null));
+$('noteTitle').addEventListener('input',e=>{const n=getNote(selectedId);if(!n)return;if(!e.target.dataset.editing){e.target.dataset.editing='1';e.target._before=snap()}n.title=e.target.value;requestDraw();scheduleSave()});
+$('noteTitle').addEventListener('change',e=>{if(e.target._before)commit(e.target._before);delete e.target._before;delete e.target.dataset.editing});
+$('noteTitle').addEventListener('blur',e=>{if(e.target._before)commit(e.target._before);delete e.target._before;delete e.target.dataset.editing});
+for(const b of document.querySelectorAll('[data-note-color]'))b.addEventListener('click',()=>{const n=getNote(selectedId);if(!n)return;const before=snap();n.color=b.dataset.noteColor;commit(before);syncNotePanel()});
+$('delete').addEventListener('click',()=>{const n=getNote(selectedId);if(!n)return;const before=snap();model.notes=model.notes.filter(x=>x!==n);selectNote(null);commit(before);notify('Стикер удалён · можно отменить')});
+$('duplicate').addEventListener('click',()=>{const n=getNote(selectedId);if(!n)return;const before=snap();const copy=clone(n);copy.id=id();copy.x+=32;copy.y+=32;copy.strokes=copy.strokes.map(s=>({...s,id:id()}));model.notes.push(copy);selectNote(copy);commit(before)});
+$('front').addEventListener('click',()=>{const n=getNote(selectedId);if(!n)return;const before=snap();bringToFront(n);commit(before)});
+$('editText').addEventListener('click',()=>{const n=getNote(selectedId);if(!n)return;$('noteText').value=n.text;$('editOverlay').hidden=false;$('noteText').focus()});
+function closeText(save){if(save){const n=getNote(selectedId);if(n){const before=snap();n.text=$('noteText').value;commit(before)}}$('editOverlay').hidden=true}
+$('cancelText').addEventListener('click',()=>closeText(false));$('saveText').addEventListener('click',()=>closeText(true));
+$('editOverlay').addEventListener('pointerdown',e=>{if(e.target===$('editOverlay'))closeText(false)});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('.menu-container'))hideMenu()});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){$('editOverlay').hidden=true;hideMenu();return}
+ const focusTag=document.activeElement?.tagName||'';if(['INPUT','TEXTAREA'].includes(focusTag))return;
+ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?doRedo():doUndo()}
+ else if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y'){e.preventDefault();doRedo()}
+ else if((e.key==='Backspace'||e.key==='Delete')&&selectedId!=null){e.preventDefault();$('delete').click()}
+ else if(e.code==='Space'&&!e.repeat){e.preventDefault();spaceHeld=true;requestDraw()}
+});document.addEventListener('keyup',e=>{if(e.code==='Space'){spaceHeld=false;requestDraw()}});
+// На настольном браузере колесо/трекпад перемещают доску, Ctrl/⌘ + колесо масштабируют.
+canvas.addEventListener('wheel',e=>{if(e.cancelable)e.preventDefault();if(e.ctrlKey||e.metaKey){setZoom(model.view.zoom*Math.exp(-e.deltaY*.007),e.clientX,e.clientY)}else{model.view.x-=e.deltaX;model.view.y-=e.deltaY;requestDraw();scheduleSave()}},{passive:false});
+window.addEventListener('resize',resizeCanvas);window.addEventListener('pagehide',()=>{if(started){clearTimeout(savingTimer);if(db)writeDB(clone(model));else writeLocal(clone(model))}});
+window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&started)saveNow()});
+setTool('pen');boot();
+})();
+</script>
+
+<script>
+// This page is fully self-contained; the service worker adds offline installation.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .catch(error => console.warn('Offline installation unavailable:', error));
+  });
+}
+</script>
+</body>
+</html>
