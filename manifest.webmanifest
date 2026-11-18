@@ -1,0 +1,38 @@
+{
+  "id": "./",
+  "name": "Draw your notes — Apple Pencil Whiteboard",
+  "short_name": "Draw Notes",
+  "description": "Minimalist freeform whiteboard for Apple Pencil handwriting, colored sticky notes and offline planning.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7fafb",
+  "theme_color": "#f7fafb",
+  "categories": [
+    "productivity",
+    "utilities",
+    "education"
+  ],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
