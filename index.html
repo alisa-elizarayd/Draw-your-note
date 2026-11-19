@@ -206,11 +206,12 @@ function drawStroke(c,s){
   // Keep ordinary handwriting thickness unchanged; only rescue tiny marks.
   const zoom=Number(model.view.zoom)||1;
   const tiny=src.length<=3&&Math.hypot(src[src.length-1][0]-src[0][0],src[src.length-1][1]-src[0][1])*zoom<3;
-  const width=tiny?Math.max(naturalWidth,Math.min(1.8/zoom,naturalWidth*2)):naturalWidth;
+  const dot=src.length===1||(tiny&&Math.hypot(src[src.length-1][0]-src[0][0],src[src.length-1][1]-src[0][1])*zoom<1.1);
+  const width=tiny?Math.max(naturalWidth,Math.min(2.2/zoom,naturalWidth*2.5)):naturalWidth;
   const alpha=isMarker?max(Number(s.opacity)||.22,.08,.55):1;
   const path=typeof Path2D==='function'?new Path2D():null;
   const target=path||c;
-  if(src.length===1){target.moveTo(src[0][0]+width/2,src[0][1]);target.arc(src[0][0],src[0][1],width/2,0,Math.PI*2);target.closePath()}
+  if(dot){const x=(src[0][0]+src[src.length-1][0])/2,y=(src[0][1]+src[src.length-1][1])/2;target.moveTo(x+width/2,y);target.arc(x,y,width/2,0,Math.PI*2);target.closePath()}
   else{
    const pts=src.map((p,i)=>{
     if(i===0||i===src.length-1)return p;
@@ -224,14 +225,14 @@ function drawStroke(c,s){
     const last=pts[pts.length-1];target.quadraticCurveTo(last[0],last[1],last[0],last[1]);
    }
   }
-  shape={path,width,alpha,point:src.length===1};
+  shape={path,width,alpha,point:dot};
   if(!active&&strokePathCache)strokePathCache.set(s,shape);
  }
  c.save();c.globalAlpha=shape.alpha;c.lineWidth=shape.width;c.lineCap='round';c.lineJoin='round';c.strokeStyle=s.color;c.fillStyle=s.color;
  if(!shape.path){
   // Fallback for older browsers without Path2D (still preserves pen support).
   c.beginPath();
-  if(shape.point)c.arc(src[0][0],src[0][1],shape.width/2,0,Math.PI*2);
+  if(shape.point){const p=src[0],q=src[src.length-1];c.arc((p[0]+q[0])/2,(p[1]+q[1])/2,shape.width/2,0,Math.PI*2)}
   else{
    c.moveTo(src[0][0],src[0][1]);
    for(let i=1;i<src.length;i++)c.lineTo(src[i][0],src[i][1]);
@@ -359,9 +360,15 @@ function pointerDown(e){if(!started||e.button!==undefined&&e.button!==0)return; 
  const pt=e.pointerType||'mouse';const isTouch=pt==='touch';
  // A resting palm must not interrupt the current Pencil stroke or start a pinch.
  if(isTouch&&gesture?.pointerType==='pen')return;
- if(e.cancelable)e.preventDefault();try{canvas.setPointerCapture(e.pointerId)}catch(_e){}
- // WebKit can reuse the same stylus pointer ID immediately after lift-off.
- if(!isTouch&&gesture?.id===e.pointerId&&(gesture.type==='draw'||gesture.type==='erase'))finishGesture();
+ if(e.cancelable)e.preventDefault();
+ // Safari sometimes keeps a capture transition pending during very fast
+ // Pencil tap-tap gestures. Canvas covers the stage; track pen release on
+ // window rather than taking/releasing capture for every microscopic tap.
+ const directPencil=pt==='pen'&&(tool==='pen'||tool==='marker');
+ if(!directPencil){try{canvas.setPointerCapture(e.pointerId)}catch(_e){}}
+ // Finish any stale pen stroke, even if Safari assigned the next tap a new
+ // pointerId without delivering the previous up event.
+ if(pt==='pen'&&gesture?.pointerType==='pen'&&(gesture.type==='draw'||gesture.type==='erase'))finishGesture();
  if(isTouch){pointerTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointerTouches.size>=2){beginPinch();return}}
  const w=W(e.clientX,e.clientY),h=hit(w);
  if(isTouch){if(h?.part==='header')startMoveNote(h.note,e,e.pointerId);else{if(h?.note)selectNote(h.note);startPan(e,e.pointerId)}return}
@@ -399,6 +406,11 @@ function pointerUp(e){if(window.DrawNotesV5?.isLassoPointer(e.pointerId)){window
  try{if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId)}catch(_e){}
 }
 canvas.addEventListener('pointerdown',pointerDown,{passive:false});canvas.addEventListener('pointermove',pointerMove,{passive:false});canvas.addEventListener('pointerup',pointerUp,{passive:false});canvas.addEventListener('pointercancel',pointerUp,{passive:false});
+// Without pointer capture, Pencil movement/release can target another element.
+// Don't dispatch a second time when the event already bubbled from canvas.
+window.addEventListener('pointermove',e=>{if(e.target!==canvas&&gesture?.pointerType==='pen'&&gesture.id===e.pointerId)pointerMove(e)},{passive:false});
+window.addEventListener('pointerup',e=>{if(e.target!==canvas&&gesture?.pointerType==='pen'&&gesture.id===e.pointerId)pointerUp(e)},{passive:false});
+window.addEventListener('pointercancel',e=>{if(e.target!==canvas&&gesture?.pointerType==='pen'&&gesture.id===e.pointerId)pointerUp(e)},{passive:false});
 // Do not finalize gestures on lostpointercapture: Safari may emit it AFTER the
 // next pointerdown with the same reused Apple Pencil ID, killing the new stroke.
 window.addEventListener('blur',()=>{if(gesture)finishGesture()});
