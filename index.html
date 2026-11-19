@@ -201,11 +201,16 @@ function drawStroke(c,s){
  if(!shape){
   const isMarker=s.tool==='marker';
   const pressure=src.reduce((sum,p)=>sum+(Number(p[2])||.5),0)/src.length;
-  const width=s.width*(isMarker?3.0:(.82+.34*pressure));
+  const naturalWidth=s.width*(isMarker?3.0:(.82+.34*pressure));
+  // Micro taps must remain visible, especially with a fine Pencil size.
+  // Keep ordinary handwriting thickness unchanged; only rescue tiny marks.
+  const zoom=Number(model.view.zoom)||1;
+  const tiny=src.length<=3&&Math.hypot(src[src.length-1][0]-src[0][0],src[src.length-1][1]-src[0][1])*zoom<3;
+  const width=tiny?Math.max(naturalWidth,Math.min(1.8/zoom,naturalWidth*2)):naturalWidth;
   const alpha=isMarker?max(Number(s.opacity)||.22,.08,.55):1;
   const path=typeof Path2D==='function'?new Path2D():null;
   const target=path||c;
-  if(src.length===1){target.arc(src[0][0],src[0][1],width/2,0,Math.PI*2)}
+  if(src.length===1){target.moveTo(src[0][0]+width/2,src[0][1]);target.arc(src[0][0],src[0][1],width/2,0,Math.PI*2);target.closePath()}
   else{
    const pts=src.map((p,i)=>{
     if(i===0||i===src.length-1)return p;
@@ -283,10 +288,29 @@ function startInk(evt,pid,t){const w=W(evt.clientX,evt.clientY),hitNote=hit(w);c
   transform:{left:canvas.getBoundingClientRect().left,top:canvas.getBoundingClientRect().top,
    viewX:model.view.x,viewY:model.view.y,zoom:model.view.zoom,noteX:note?.x||0,noteY:note?.y||0}};addInkPoints(evt);requestDraw();
 }
-function addInkPoints(e){if(!gesture||gesture.type!=='draw')return;const events=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():[];const all=events.length?events:[e];let changed=false;
- for(const sample of all){const point=pointFor(sample,gesture),arr=gesture.stroke.points,prev=arr[arr.length-1];if(!prev||Math.hypot(prev[0]-point[0],prev[1]-point[1])>.26/model.view.zoom){arr.push(point);changed=true}}
- // Иногда coalesced events отсутствуют или заканчиваются раньше последнего события.
- const point=pointFor(e,gesture),arr=gesture.stroke.points,prev=arr[arr.length-1];if(!prev||Math.hypot(prev[0]-point[0],prev[1]-point[1])>.26/model.view.zoom){arr.push(point);changed=true}
+function addInkPoints(e,finalSample=false){
+ if(!gesture||gesture.type!=='draw')return;
+ const g=gesture,arr=g.stroke.points;
+ const events=typeof e.getCoalescedEvents==='function'?e.getCoalescedEvents():[];
+ let changed=false;
+ // A quarter-screen-pixel threshold loses the 1–2 samples produced by tiny
+ // commas, dots and short Pencil flicks. Record sub-pixel motion while avoiding
+ // identical Safari coalesced samples.
+ const minDistance=.045/(g.transform?.zoom||model.view.zoom);
+ const append=sample=>{
+  if(!Number.isFinite(sample.clientX)||!Number.isFinite(sample.clientY))return;
+  const p=pointFor(sample,g),prev=arr[arr.length-1];
+  if(!prev||Math.hypot(prev[0]-p[0],prev[1]-p[1])>minDistance){
+   arr.push(p);changed=true;
+  }else if(finalSample&&prev){
+   // Preserve the precise Pencil lift-off, even when it is only microns away
+   // from the last coalesced point. Never drop the final endpoint.
+   arr[arr.length-1]=p;changed=true;
+  }
+ };
+ for(const sample of events)append(sample);
+ // Coalesced samples do not always include the latest actual event.
+ append(e);
  if(changed)requestDraw();
 }
 // The freehand layer is above notes, so an eraser must work across BOTH
@@ -368,7 +392,7 @@ function finishGesture(){if(!gesture)return;const g=gesture;gesture=null;
 function pointerUp(e){if(window.DrawNotesV5?.isLassoPointer(e.pointerId)){window.DrawNotesV5.endLasso(e);try{canvas.releasePointerCapture(e.pointerId)}catch(_){}return}
  if(e.pointerType==='touch'){pointerTouches.delete(e.pointerId);if(pinch){if(pointerTouches.size<2){pinch=null;gesture=null;scheduleSave()}return}}
  if(gesture?.id===e.pointerId){
-  if(e.type!=='pointercancel'&&gesture.type==='draw')addInkPoints(e); // precise final tip
+  if(e.type!=='pointercancel'&&gesture.type==='draw')addInkPoints(e,true); // retain microscopic tip
   if(e.type!=='pointercancel'&&gesture.type==='erase')eraseAt(e);
   finishGesture();
  }
