@@ -1,5 +1,5 @@
 /* Draw your notes — offline-first app shell. Bump CACHE_VERSION for new releases. */
-const CACHE_VERSION = 'draw-your-notes-v5-microink-20261119';
+const CACHE_VERSION = 'draw-your-notes-v5-rapid-taps-20261119';
 const APP_SHELL = ['./','./index.html','./manifest.webmanifest','./favicon.svg','./icon-192.png','./icon-512.png','./icon-512-maskable.png','./apple-touch-icon.png'];
 const BASE = new URL('./', self.location.href);
 self.addEventListener('install', event => {
